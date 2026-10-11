@@ -1,21 +1,20 @@
 import type { Metadata } from "next";
-import Image from "next/image";
+import Link from "next/link";
 import { SectionHeading } from "@/components/layout/page-hero";
 import { AnnotatedBlueprint } from "@/components/aero/annotated-blueprint";
 import { FlightControlDiagram } from "@/components/aero/flight-control-diagram";
-import { ParallaxImage } from "@/components/media/parallax-image";
+import { DroneExplorer } from "@/components/aero/drone-explorer";
 import { DroneBlueprint } from "@/components/viz/drone-blueprint";
 import { ButtonLink } from "@/components/ui/button";
 import { Eyebrow, MediaNote, StatusTag } from "@/components/ui/primitives";
 import { Reveal } from "@/components/ui/reveal";
 import { a1Specs, roadmap, sensorDirection } from "@/content/aero";
-import { media } from "@/content/media";
 import { cn } from "@/lib/cn";
 
 export const metadata: Metadata = {
-  title: "ORYN Aero",
+  title: "SensorDyme Aero",
   description:
-    "ORYN Aero is our modular aerial robotics platform. ORYN A1 is the development aircraft we are building to integrate, test, and characterize the ORYN system.",
+    "SensorDyme Aero is the aerial extension of SensorDyme intelligence. A1 is the modular development aircraft we are building to integrate, test, and characterize it.",
   alternates: { canonical: "/aero" },
 };
 
@@ -23,18 +22,31 @@ const philosophy = [
   {
     title: "Integrate, then characterize.",
     body: "We start from proven components — motors, flight controllers, sensors — and invest our effort in how they work together. Each module is bench-tested and documented before integration.",
-    image: media.aeroElectronics,
   },
   {
     title: "Designed for the field.",
     body: "Survey work means repetition. The airframe is designed around fast inspection, battery swaps, and replacing a damaged arm in minutes rather than hours.",
-    image: media.aeroFrame,
   },
   {
     title: "Sensing defines the aircraft.",
     body: "Payload requirements drive everything else: power budget, flight time, stability. We size the aircraft around the data we need to collect.",
-    image: media.aeroCamera,
   },
+];
+
+const vantage = [
+  { k: "Point of view", edge: "Fixed, at eye level", aero: "Mobile, from above" },
+  { k: "Coverage", edge: "One room, yard, or vehicle", aero: "Large or hard-to-reach areas" },
+  { k: "Intelligence", edge: "SensorDyme, on the device", aero: "SensorDyme, intended onboard" },
+  { k: "Status", edge: "Working prototype", aero: "Concept · development platform" },
+];
+
+const exploring = [
+  { name: "Environmental intelligence", href: "/solutions/environment" },
+  { name: "Disaster assessment", href: "/solutions/disaster-response" },
+  { name: "Agricultural monitoring", href: "/solutions/agriculture" },
+  { name: "Construction monitoring", href: "/solutions/construction" },
+  { name: "Search & rescue", href: "/solutions/search-and-rescue" },
+  { name: "Infrastructure inspection", href: null },
 ];
 
 const phaseStyle: Record<(typeof roadmap)[number]["state"], string> = {
@@ -58,17 +70,17 @@ export default function AeroPage() {
         <div aria-hidden="true" className="tech-grid absolute inset-0 -z-10 text-bone-50 opacity-50 [mask-image:radial-gradient(ellipse_at_65%_45%,black,transparent_70%)]" />
         <div className="shell grid gap-10 pb-16 lg:min-h-[calc(100svh-var(--header-h)-3rem)] lg:grid-cols-12 lg:items-center lg:pb-10">
           <div className="lg:col-span-5">
-            <Eyebrow className="animate-[fade_1.2s_var(--ease-out-expo)_0.2s_both]">ORYN Aero</Eyebrow>
+            <Eyebrow className="animate-[fade_1.2s_var(--ease-out-expo)_0.2s_both]">SensorDyme Aero</Eyebrow>
             <h1 id="aero-hero" className="t-display mt-6 animate-[fade_1.4s_var(--ease-out-expo)_0.3s_both] uppercase">
-              A1.
+              Aero.
             </h1>
-            <p className="t-h3 mt-6 max-w-md animate-[fade_1.4s_var(--ease-out-expo)_0.45s_both] text-bone-50/85">Our development platform.</p>
+            <p className="t-h3 mt-6 max-w-md animate-[fade_1.4s_var(--ease-out-expo)_0.45s_both] text-bone-50/85">SensorDyme, given altitude.</p>
             <p className="t-body mt-5 max-w-md animate-[fade_1.4s_var(--ease-out-expo)_0.55s_both] text-bone-50/60">
-              ORYN A1 is the aircraft we are building to integrate, test, and characterize the ORYN system — a modular multirotor designed around high-quality aerial data capture.
+              SensorDyme Aero is the aerial extension of SensorDyme intelligence. A1 is the development aircraft we are building to integrate, test, and characterize it — a modular multirotor designed around high-quality aerial data capture.
             </p>
             <div className="mt-8 flex animate-[fade_1.4s_var(--ease-out-expo)_0.65s_both] flex-wrap items-center gap-4">
-              <StatusTag tone="signal">In development</StatusTag>
-              <StatusTag>Concept rendering</StatusTag>
+              <StatusTag tone="signal">A1 · In development</StatusTag>
+              <StatusTag>Concept drawing</StatusTag>
             </div>
           </div>
           <div className="lg:col-span-7">
@@ -93,12 +105,55 @@ export default function AeroPage() {
             </div>
           </div>
         </div>
-        <Reveal className="mt-20 md:mt-28">
-          <ParallaxImage image={media.aeroDroneCustom} className="aspect-[4/3] md:aspect-[21/9]" imgClassName="brightness-[0.62] contrast-[1.08] saturate-[0.85]" />
-          <div className="shell">
-            <MediaNote className="mt-3">Representative custom multirotor build — not ORYN hardware. Photo: Josh Ogden / Unsplash</MediaNote>
+        <div className="shell mt-20 md:mt-28">
+          <DroneExplorer idPrefix="aero-page" />
+        </div>
+      </section>
+
+      <section aria-labelledby="vantage-title" className="border-t border-bone-50/[0.06] bg-ink-900 py-28 md:py-36">
+        <div className="shell">
+          <SectionHeading
+            id="vantage-title"
+            eyebrow="Edge and Aero"
+            title="Same intelligence. A new vantage point."
+            body="SensorDyme Edge watches one place, continuously. Aero is designed to carry the same perceive–track–verify approach to places a fixed sensor cannot reach."
+          />
+          <div className="mt-14 overflow-hidden rounded-[3px] border border-bone-50/10">
+            <div className="t-mono grid grid-cols-[1fr_1fr] border-b border-bone-50/10 bg-ink-950 text-bone-50/55 md:grid-cols-[1fr_1.4fr_1.4fr]">
+              <span className="hidden px-5 py-3 md:block">Layer</span>
+              <span className="px-5 py-3">SensorDyme Edge</span>
+              <span className="border-l border-bone-50/10 px-5 py-3">SensorDyme Aero</span>
+            </div>
+            {vantage.map((r) => (
+              <div key={r.k} className="grid grid-cols-[1fr_1fr] border-b border-bone-50/10 last:border-b-0 md:grid-cols-[1fr_1.4fr_1.4fr]">
+                <span className="t-mono col-span-2 px-5 pt-4 text-bone-50/50 md:col-span-1 md:py-4">{r.k}</span>
+                <span className="px-5 py-3 text-[0.9375rem] text-bone-50/85 md:py-4">{r.edge}</span>
+                <span className="border-l border-bone-50/10 px-5 py-3 text-[0.9375rem] text-bone-50/85 md:py-4">{r.aero}</span>
+              </div>
+            ))}
           </div>
-        </Reveal>
+          <div className="mt-16">
+            <p className="t-eyebrow text-bone-50/50">Exploring applications in</p>
+            <ul className="mt-5 grid border-t border-bone-50/10 sm:grid-cols-2 lg:grid-cols-3">
+              {exploring.map((x) => (
+                <li key={x.name} className="border-b border-bone-50/10">
+                  {x.href ? (
+                    <Link href={x.href} className="group flex items-baseline justify-between gap-4 py-4 pr-4">
+                      <span className="text-[1.0625rem] text-bone-50/85 transition-colors group-hover:text-bone-50">{x.name}</span>
+                      <span aria-hidden="true" className="text-bone-50/40 transition-transform group-hover:translate-x-1 group-hover:text-bone-50">→</span>
+                    </Link>
+                  ) : (
+                    <span className="flex items-baseline justify-between gap-4 py-4 pr-4">
+                      <span className="text-[1.0625rem] text-bone-50/85">{x.name}</span>
+                      <span className="t-mono text-bone-50/45">Exploratory</span>
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+            <MediaNote className="mt-4">Intended applications. No SensorDyme Aero missions have been flown for customers.</MediaNote>
+          </div>
+        </div>
       </section>
 
       <section aria-labelledby="modules-title" className="border-t border-bone-50/[0.06] bg-ink-900 py-28 md:py-36">
@@ -119,21 +174,15 @@ export default function AeroPage() {
       <section aria-labelledby="philosophy-title" className="bg-ink-950 py-28 md:py-36">
         <div className="shell">
           <SectionHeading id="philosophy-title" index="02" eyebrow="Integration philosophy" title="How we build hardware." />
-          <div className="mt-16 space-y-20 md:space-y-28">
+          <div className="mt-16 grid gap-px overflow-hidden rounded-[3px] border border-bone-50/10 bg-bone-50/10 md:grid-cols-3">
             {philosophy.map((p, i) => (
-              <Reveal key={p.title} className="grid gap-8 md:grid-cols-12 md:items-center">
-                <div className={cn("relative aspect-[4/3] overflow-hidden rounded-[2px] bg-ink-850 md:col-span-7", i % 2 === 1 && "md:order-2 md:col-start-6")}>
-                  <Image src={p.image.src} alt={p.image.alt} fill sizes="(min-width: 768px) 58vw, 100vw" placeholder="blur" className="object-cover" style={{ objectPosition: p.image.focal }} />
-                </div>
-                <div className={cn("md:col-span-4", i % 2 === 1 ? "md:order-1 md:col-start-1" : "md:col-start-9")}>
-                  <p className="t-mono text-bone-50/55">0{i + 1}</p>
-                  <h3 className="t-h3 mt-4">{p.title}</h3>
-                  <p className="t-body mt-4 text-bone-50/65">{p.body}</p>
-                </div>
+              <Reveal key={p.title} delay={i * 0.08} className="bg-ink-950 p-6 md:p-8">
+                <p className="t-mono text-bone-50/55">0{i + 1}</p>
+                <h3 className="t-h3 mt-8 md:mt-16">{p.title}</h3>
+                <p className="t-body mt-4 text-bone-50/65">{p.body}</p>
               </Reveal>
             ))}
           </div>
-          <MediaNote className="mt-12">Representative imagery of hardware categories. Photos via Unsplash — see Media credits.</MediaNote>
         </div>
       </section>
 
@@ -164,10 +213,10 @@ export default function AeroPage() {
           />
           <ul className="mt-14 border-t border-bone-50/10">
             {sensorDirection.map((s) => (
-              <li key={s.name} className="grid gap-3 border-b border-bone-50/10 py-6 md:grid-cols-12 md:items-baseline md:gap-8">
+              <li key={s.name} className="grid gap-3 border-b border-bone-50/10 py-6 md:grid-cols-12 md:items-baseline md:gap-x-8 md:gap-y-3">
                 <h3 className="t-h4 md:col-span-4">{s.name}</h3>
-                <p className="t-body text-bone-50/60 md:col-span-6">{s.body}</p>
-                <div className="md:col-span-2 md:text-right">
+                <p className="t-body text-bone-50/60 md:col-span-8 xl:col-span-6">{s.body}</p>
+                <div className="md:col-span-8 md:col-start-5 xl:col-span-2 xl:col-start-auto xl:text-right">
                   <StatusTag tone={s.status === "Initial focus" ? "signal" : "neutral"}>{s.status}</StatusTag>
                 </div>
               </li>
@@ -210,7 +259,7 @@ export default function AeroPage() {
             id="roadmap-title"
             index="06"
             eyebrow="Development roadmap"
-            title="Where A1 is headed."
+            title="Where Aero is headed."
             body="Phases are sequential in intent, but overlap in practice. Timing will be shared as milestones are reached."
           />
           <ol className="relative mt-16 grid gap-10 md:grid-cols-5 md:gap-6">

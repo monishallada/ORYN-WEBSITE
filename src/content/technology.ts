@@ -91,8 +91,8 @@ export const pillars = [
   {
     id: "edge-ai",
     name: "Edge AI",
-    body: "Over time, moving selected inference onboard the aircraft to prioritize data, check capture quality in flight, and reduce turnaround.",
-    status: "Research",
+    body: "Inference on the device itself. It runs today on the SensorDyme Edge prototype; moving selected inference onboard the aircraft is research for Aero.",
+    status: "Prototype · Research",
   },
   {
     id: "geospatial",
@@ -131,4 +131,51 @@ export const principles = [
     title: "Data stewardship",
     body: "Customer imagery and findings belong to the customer. Privacy is a design requirement, not an afterthought.",
   },
+];
+
+/** Where SensorDyme runs. Status labels match the product pages. */
+export const platforms = [
+  {
+    id: "edge",
+    name: "SensorDyme Edge",
+    role: "Physical sensing + local intelligence",
+    body: "A fixed unit that sees, tracks, and confirms events on the device itself — and acts in the room.",
+    status: "Working prototype",
+    href: "/edge",
+  },
+  {
+    id: "aero",
+    name: "SensorDyme Aero",
+    role: "Aerial sensing · development platform",
+    body: "A modular aircraft being developed to give the same intelligence altitude, reach, and mobility.",
+    status: "In development",
+    href: "/aero",
+  },
+  {
+    id: "intelligence",
+    name: "SensorDyme intelligence",
+    role: "Perceive · track · context · verify · act",
+    body: "The shared layer: detection, tracking, zones, temporal verification, and rules — specialized models directed by a deterministic safety engine.",
+    status: "In prototype software",
+    href: "/edge#pipeline-title",
+  },
+  {
+    id: "systems",
+    name: "ORYN Command & Portal",
+    role: "Operations and delivery",
+    body: "Software for running aerial missions and delivering findings — Command for ORYN's operators, Portal for customers.",
+    status: "Planned",
+    href: "/platform",
+  },
+];
+
+/** The on-device loop on SensorDyme Edge (device software + Jupiter design notes). */
+export const edgeLoop = [
+  { label: "Camera", body: "Frames captured on the device" },
+  { label: "Detection", body: "DAMO-YOLO on the Hailo-8L" },
+  { label: "Tracking", body: "The same person, across frames" },
+  { label: "Context", body: "Named zones, judged at the feet" },
+  { label: "Verification", body: "Persistence, frame count, smoothed confidence" },
+  { label: "Rules", body: "Deterministic safety engine" },
+  { label: "Action", body: "Buzzer and local event log" },
 ];

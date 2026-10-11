@@ -27,7 +27,7 @@ const steps = [
     id: "analyze",
     n: "03",
     title: "Analyze",
-    body: "ORYN Intelligence processes the imagery, and our team reviews every finding before it reaches you.",
+    body: "SensorDyme processes the imagery, and our team reviews every finding before it reaches you.",
     image: media.stepAnalyze,
   },
   {

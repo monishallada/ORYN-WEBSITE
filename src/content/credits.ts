@@ -13,66 +13,6 @@ export type Credit = {
 
 export const credits: Credit[] = [
   {
-    "file": "aero-drone.jpg",
-    "kind": "image",
-    "author": "Christopher Burns",
-    "authorUrl": "https://unsplash.com/@christopher__burns",
-    "source": "https://unsplash.com/photos/xoMWD3nqEGg",
-    "license": "Unsplash License",
-    "licenseUrl": "https://unsplash.com/license",
-    "description": "Professional quadcopter with a gimbal camera hovering low above grass against a dark forest backdrop."
-  },
-  {
-    "file": "aero-drone-custom.jpg",
-    "kind": "image",
-    "author": "Josh Ogden",
-    "authorUrl": "https://unsplash.com/@joshogden",
-    "source": "https://unsplash.com/photos/cDTQmxoNrZA",
-    "license": "Unsplash License",
-    "licenseUrl": "https://unsplash.com/license",
-    "description": "Custom heavy-lift multirotor with exposed electronics and an orange cylindrical payload, landed on snow."
-  },
-  {
-    "file": "aero-motor.jpg",
-    "kind": "image",
-    "author": "Bence Balla-Schottner",
-    "authorUrl": "https://unsplash.com/@ballaschottner",
-    "source": "https://unsplash.com/photos/jPccMfZ2vKg",
-    "license": "Unsplash License",
-    "licenseUrl": "https://unsplash.com/license",
-    "description": "Close-up of a black brushless motor and carbon-fiber propeller on a large industrial multirotor, with a dark, blurred workshop behind."
-  },
-  {
-    "file": "aero-camera.jpg",
-    "kind": "image",
-    "author": "Surya Devarakonda",
-    "authorUrl": "https://unsplash.com/@suryadevarakonda",
-    "source": "https://unsplash.com/photos/Em8pQ3EdEPw",
-    "license": "Unsplash License",
-    "licenseUrl": "https://unsplash.com/license",
-    "description": "Moody close-up of a drone's gimbal camera and sensor housing lit in teal and orange on a dark desk."
-  },
-  {
-    "file": "aero-frame.jpg",
-    "kind": "image",
-    "author": "ThisisEngineering",
-    "authorUrl": "https://unsplash.com/@thisisengineering",
-    "source": "https://unsplash.com/photos/oM_Cbj11S5Y",
-    "license": "Unsplash License",
-    "licenseUrl": "https://unsplash.com/license",
-    "description": "Custom carbon-fiber FPV drone build on a green cutting mat, with screwdrivers, a Raspberry Pi board and a laptop on the workbench."
-  },
-  {
-    "file": "aero-electronics.jpg",
-    "kind": "image",
-    "author": "Akshat Sharma",
-    "authorUrl": "https://unsplash.com/@asphotographypics",
-    "source": "https://unsplash.com/photos/S5KwkmFeX_E",
-    "license": "Unsplash License",
-    "licenseUrl": "https://unsplash.com/license",
-    "description": "Macro of a black power-distribution circuit board held in helping-hand clamps against a dark background."
-  },
-  {
     "file": "intel-agriculture.jpg",
     "kind": "image",
     "author": "Bernd Dittrich",

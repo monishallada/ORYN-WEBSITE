@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
-/** Section label: "02 — ORYN Aero" in mono. */
+/** Section label: "02 — SensorDyme Aero" in mono. */
 export function Eyebrow({
   index,
   children,

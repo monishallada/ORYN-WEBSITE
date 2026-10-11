@@ -10,14 +10,14 @@ import { team } from "@/content/team";
 export const metadata: Metadata = {
   title: "About",
   description:
-    "ORYN is an early-stage aerospace and AI company building integrated aerial intelligence — aircraft, computer vision, and managed operations.",
+    "ORYN is an early-stage company building intelligent physical systems. SensorDyme, our perception and reasoning layer, powers SensorDyme Edge and the SensorDyme Aero development platform.",
   alternates: { canonical: "/about" },
 };
 
 const philosophy = [
   {
     title: "Integrated, not assembled.",
-    body: "Aircraft, software, and operations are designed together. The value is in how the pieces work as one system.",
+    body: "Hardware, software, and operations are designed together. The value is in how the pieces work as one system.",
   },
   {
     title: "Honest about maturity.",
@@ -37,7 +37,7 @@ const horizons = [
   {
     when: "Now",
     title: "Build the foundation",
-    body: "Develop the A1 platform, the core analysis pipeline, and the first versions of Command and Portal.",
+    body: "Mature the SensorDyme Edge prototype, develop the Aero A1 platform and the core analysis pipeline, and build the first versions of Command and Portal.",
   },
   {
     when: "Next",
@@ -47,7 +47,7 @@ const horizons = [
   {
     when: "Long term",
     title: "An integrated ecosystem",
-    body: "Purpose-built aircraft, intelligence software, and managed operations — making aerial intelligence as easy to use as any other business service.",
+    body: "Purpose-built sensors and aircraft, SensorDyme intelligence, and managed operations — making physical-world intelligence as easy to use as any other business service.",
   },
 ];
 
@@ -71,7 +71,7 @@ export default function AboutPage() {
         <div className="shell">
           <p className="t-eyebrow text-bone-50/50">Our mission</p>
           <h2 id="mission-title" className="t-h2 mt-6 max-w-5xl text-balance">
-            To make sophisticated aerial intelligence accessible to every organization that needs it — without requiring them to operate drones or understand the technology behind them.
+            To build systems that see, understand, and act in the physical world — and make that intelligence accessible to every organization that needs it, without requiring them to understand the technology behind it.
           </h2>
         </div>
       </section>

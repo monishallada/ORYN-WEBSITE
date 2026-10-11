@@ -13,13 +13,13 @@ const steps = [
   {
     n: "01",
     title: "Aircraft",
-    product: "ORYN Aero",
+    product: "SensorDyme Aero",
     body: "Modular aircraft designed to capture consistent, high-quality aerial data across large and complex areas.",
   },
   {
     n: "02",
     title: "Vision",
-    product: "ORYN Intelligence",
+    product: "SensorDyme",
     body: "Computer vision that turns raw imagery into detections, segmented regions, and measurements on a map.",
   },
   {
@@ -51,7 +51,7 @@ function useIsDesktop() {
   return is;
 }
 
-export function SystemIntro() {
+export function SystemIntro({ index = "01" }: { index?: string }) {
   const ref = useRef<HTMLElement>(null);
   const isDesktop = useIsDesktop();
   const reduce = useReducedMotion();
@@ -75,14 +75,14 @@ export function SystemIntro() {
       <div className="lg:sticky lg:top-0 lg:flex lg:h-screen lg:items-center">
         <div className="shell grid gap-10 py-24 lg:grid-cols-12 lg:gap-8 lg:py-0">
           <div className="flex flex-col justify-center lg:col-span-5 xl:col-span-4">
-            <Eyebrow index="01">The system</Eyebrow>
+            <Eyebrow index={index}>The aerial system</Eyebrow>
             <h2 id="system-title" className="t-h2 mt-6 uppercase">
               More than
               <br />a drone.
             </h2>
             <p className="t-lead mt-6 max-w-md text-bone-50/70">An integrated aerial intelligence system.</p>
             <p className="t-body mt-4 max-w-md text-bone-50/55">
-              ORYN combines aircraft, computer vision, and enterprise software into one system — so aerial observation becomes information you can act on.
+              Aero, SensorDyme, and ORYN&apos;s operations software are designed as one system — so aerial observation becomes information you can act on.
             </p>
 
             <ol className="mt-10 border-t border-bone-50/10">

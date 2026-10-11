@@ -1,6 +1,6 @@
-# ORYN — Autonomous Aerial Intelligence
+# ORYN — Intelligent Physical Systems
 
-The public marketing website for ORYN: aircraft (ORYN Aero), computer vision and geospatial analysis (ORYN Intelligence), operations software (ORYN Command), and the customer dashboard (ORYN Portal).
+The public marketing website for ORYN. ORYN is the company; **SensorDyme** is its perception and reasoning layer, shipped as two products: **SensorDyme Edge** (on-device intelligent sensing, `/edge`) and **SensorDyme Aero** (the aerial development platform, `/aero`). Aerial analysis (`/intelligence`), ORYN Command, and ORYN Portal complete the system.
 
 Built with Next.js (App Router), TypeScript, Tailwind CSS v4, and Motion. It deploys to Vercel with no extra configuration.
 
@@ -81,7 +81,7 @@ Once the repository is connected to Vercel, every push to `main` deploys to prod
 src/
   app/                    Routes (App Router)
     page.tsx              Home
-    technology/ aero/ intelligence/ platform/ solutions/ solutions/[slug]/
+    technology/ edge/ aero/ intelligence/ platform/ solutions/ solutions/[slug]/
     about/ contact/ credits/
     api/contact/route.ts  Contact form endpoint
     layout.tsx            Fonts, metadata, header/footer, JSON-LD
@@ -94,7 +94,9 @@ src/
     home/                 Home-page sections
     previews/             Interactive ORYN Command and ORYN Portal previews
     viz/                  Comparison slider, demos, blueprint, mosaic, report
-    aero/ tech/ contact/ media/ ui/
+    edge/                 SensorDyme Edge pipeline story & device explorer
+    aero/                 Aero 3D explorer (Three.js, loaded on demand), blueprint
+    tech/ contact/ media/ ui/
   content/                All copy and data. Edit these files to change the site.
   assets/                 Statically imported images (blur placeholders, hashing)
 public/
@@ -114,7 +116,8 @@ Most changes don't require touching components:
 | --- | --- |
 | Navigation, footer links, site description | `src/content/site.ts` |
 | Industry pages (copy, images, status) | `src/content/industries.ts` |
-| A1 specifications, modules, roadmap | `src/content/aero.ts` |
+| Aero specifications, modules, 3D explorer systems, roadmap | `src/content/aero.ts` |
+| SensorDyme Edge pipeline, device parts, measurements, status | `src/content/sensordyme.ts` |
 | Architecture stages, pillars, principles | `src/content/technology.ts` |
 | Command preview sample missions | `src/content/missions.ts` |
 | Intelligence demos | `src/content/intelligence.ts` |
@@ -128,7 +131,8 @@ ORYN is early-stage. The site is written to be ambitious but accurate:
 - **Specifications** in `src/content/aero.ts` are `null` ("To be established") until they are measured. Only add a value once it has been validated.
 - **Team:** `src/content/team.ts` is empty on purpose. Add real people only; the About page shows a founder-led statement until then.
 - **Previews** (Command, Portal, the Intelligence demos) are labeled "Interactive product preview", "Concept preview", "Sample data", or "Illustrative". Keep those labels until they connect to production systems.
-- **Third-party hardware** in photos is captioned "Representative — not ORYN hardware." Replace it with real ORYN prototype photography when available.
+- **Third-party hardware** in photos is captioned "Representative — not ORYN hardware." SensorDyme Aero is shown only as ORYN's code-built concept model, never with stock photography.
+- **SensorDyme claims** come from the SensorDyme device repository and demo. Measured figures in `src/content/sensordyme.ts` are from one prototype unit and are labeled as such.
 - **No** fabricated customers, partners, certifications, statistics, or testimonials.
 
 ## Connecting ORYN Command later

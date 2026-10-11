@@ -5,9 +5,22 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Logo } from "@/components/brand/logo";
-import { primaryNav, site } from "@/content/site";
+import { primaryNav, site, type NavItem } from "@/content/site";
 import { industries } from "@/content/industries";
 import { cn } from "@/lib/cn";
+
+type MenuEntry = { n: string; title: string; desc: string; href: string };
+
+/** Dropdown contents for nav items that have them: product families and solutions. */
+function dropdownFor(item: NavItem): MenuEntry[] | null {
+  if (item.children) {
+    return item.children.map((c, i) => ({ n: String(i + 1).padStart(2, "0"), title: c.label, desc: c.description ?? "", href: c.href }));
+  }
+  if (item.href === "/solutions") {
+    return industries.map((ind) => ({ n: ind.index, title: ind.name, desc: ind.headline, href: `/solutions/${ind.slug}` }));
+  }
+  return null;
+}
 
 export function Header() {
   const pathname = usePathname();
@@ -57,58 +70,48 @@ export function Header() {
 
           <nav aria-label="Primary" className="hidden items-center lg:flex">
             <ul className="flex items-center gap-1">
-              {primaryNav.map((item) =>
-                item.href === "/solutions" ? (
-                  <li key={item.href} className="group relative">
+              {primaryNav.map((item) => {
+                const menu = dropdownFor(item);
+                const active = isActive(item.href) || !!item.children?.some((c) => isActive(c.href));
+                return (
+                  <li key={item.href} className={menu ? "group relative" : undefined}>
                     <Link
                       href={item.href}
                       aria-current={isActive(item.href) ? "page" : undefined}
                       className={cn(
                         "relative block px-3.5 py-2 text-[0.875rem] tracking-[-0.005em] transition-colors",
-                        isActive(item.href) ? "text-bone-50" : "text-bone-50/65 hover:text-bone-50",
+                        active ? "text-bone-50" : "text-bone-50/65 hover:text-bone-50",
                       )}
                     >
                       {item.label}
+                      {active ? <span aria-hidden="true" className="absolute inset-x-3.5 -bottom-px h-px bg-bone-50/70" /> : null}
                     </Link>
-                    <div className="pointer-events-none invisible absolute left-1/2 top-full w-[440px] -translate-x-1/2 pt-3 opacity-0 transition-[opacity,visibility] duration-300 group-focus-within:pointer-events-auto group-focus-within:visible group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:visible group-hover:opacity-100">
-                      <div className="border border-bone-50/10 bg-ink-900/95 p-2 shadow-2xl shadow-black/50 backdrop-blur-xl">
-                        <ul>
-                          {industries.map((ind) => (
-                            <li key={ind.slug}>
-                              <Link
-                                href={`/solutions/${ind.slug}`}
-                                className="flex items-baseline gap-4 rounded-[2px] px-3 py-2.5 transition-colors hover:bg-bone-50/[0.05]"
-                              >
-                                <span className="t-mono text-bone-50/55">{ind.index}</span>
-                                <span>
-                                  <span className="block text-[0.9375rem] text-bone-50">{ind.name}</span>
-                                  <span className="block text-[0.8125rem] text-bone-50/50">{ind.headline}</span>
-                                </span>
-                              </Link>
-                            </li>
-                          ))}
-                        </ul>
+                    {menu ? (
+                      <div className="pointer-events-none invisible absolute left-1/2 top-full w-[440px] -translate-x-1/2 pt-3 opacity-0 transition-[opacity,visibility] duration-300 group-focus-within:pointer-events-auto group-focus-within:visible group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:visible group-hover:opacity-100">
+                        <div className="border border-bone-50/10 bg-ink-900/95 p-2 shadow-2xl shadow-black/50 backdrop-blur-xl">
+                          <ul>
+                            {menu.map((m) => (
+                              <li key={m.href}>
+                                <Link
+                                  href={m.href}
+                                  aria-current={isActive(m.href) ? "page" : undefined}
+                                  className="flex items-baseline gap-4 rounded-[2px] px-3 py-2.5 transition-colors hover:bg-bone-50/[0.05]"
+                                >
+                                  <span className="t-mono text-bone-50/55">{m.n}</span>
+                                  <span>
+                                    <span className="block text-[0.9375rem] text-bone-50">{m.title}</span>
+                                    <span className="block text-[0.8125rem] text-bone-50/50">{m.desc}</span>
+                                  </span>
+                                </Link>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
                       </div>
-                    </div>
+                    ) : null}
                   </li>
-                ) : (
-                  <li key={item.href}>
-                    <Link
-                      href={item.href}
-                      aria-current={isActive(item.href) ? "page" : undefined}
-                      className={cn(
-                        "relative block px-3.5 py-2 text-[0.875rem] tracking-[-0.005em] transition-colors",
-                        isActive(item.href) ? "text-bone-50" : "text-bone-50/65 hover:text-bone-50",
-                      )}
-                    >
-                      {item.label}
-                      {isActive(item.href) ? (
-                        <span aria-hidden="true" className="absolute inset-x-3.5 -bottom-px h-px bg-bone-50/70" />
-                      ) : null}
-                    </Link>
-                  </li>
-                ),
-              )}
+                );
+              })}
             </ul>
           </nav>
 
@@ -125,7 +128,7 @@ export function Header() {
               href="/contact?intent=demo"
               className="hidden h-10 items-center rounded-[2px] bg-bone-50 px-4 text-[0.875rem] font-medium text-ink-900 transition-colors hover:bg-white sm:inline-flex"
             >
-              Request a demo
+              Talk to the team
             </Link>
             <button
               type="button"
@@ -215,7 +218,7 @@ function MobileMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
         >
           <nav aria-label="Mobile" className="shell flex flex-1 flex-col pb-10 pt-6">
             <ul className="border-t border-bone-50/10">
-              {[{ label: "Home", href: "/" }, ...primaryNav, { label: "Contact", href: "/contact" }].map((item, i) => (
+              {[{ label: "Home", href: "/" }, ...primaryNav.flatMap((n) => n.children ?? [n]), { label: "Contact", href: "/contact" }].map((item, i) => (
                 <motion.li
                   key={item.href}
                   initial={{ opacity: 0, y: 16 }}
@@ -248,7 +251,7 @@ function MobileMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
                 onClick={onClose}
                 className="flex h-14 items-center justify-center rounded-[2px] bg-bone-50 text-[1rem] font-medium text-ink-900"
               >
-                Request a demo
+                Talk to the team
               </Link>
               <p className="t-mono mt-6 text-bone-50/55">{site.tagline}</p>
             </div>

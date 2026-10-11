@@ -12,9 +12,9 @@ import { Reveal } from "@/components/ui/reveal";
 import { media, video } from "@/content/media";
 
 export const metadata: Metadata = {
-  title: "ORYN Intelligence",
+  title: "Aerial Analysis",
   description:
-    "ORYN Intelligence is our computer vision and geospatial analysis engine in development: object detection, segmentation, geospatial mapping, temporal change detection, and reporting.",
+    "SensorDyme aerial analysis — the computer vision and geospatial work in development for SensorDyme Aero: object detection, segmentation, geospatial mapping, temporal change detection, and reporting.",
   alternates: { canonical: "/intelligence" },
 };
 
@@ -30,7 +30,7 @@ export default function IntelligencePage() {
   return (
     <>
       <PageHero
-        eyebrow="ORYN Intelligence"
+        eyebrow="SensorDyme · Aerial analysis"
         title={
           <span className="uppercase">
             Every frame.
@@ -38,7 +38,7 @@ export default function IntelligencePage() {
             More intelligence.
           </span>
         }
-        lead="Our computer vision and geospatial analysis engine — designed to turn aerial imagery into detections, maps, measurements, and change over time."
+        lead="SensorDyme applied to aerial imagery — computer vision and geospatial analysis designed to turn what Aero captures into detections, maps, measurements, and change over time."
         media={<HeroMedia poster={media.flyoverPoster.src} alt={media.flyoverPoster.alt} video={video.flyover} className="-z-10 [&_img]:brightness-75" />}
         credit="Aerial footage: Marco López / Mixkit"
       >
@@ -149,7 +149,7 @@ export default function IntelligencePage() {
           <div className="flex flex-col gap-3 sm:flex-row">
             <ButtonLink href="/platform">Command & Portal</ButtonLink>
             <ButtonLink href="/contact?intent=demo" variant="secondary">
-              Request a demo
+              Talk to the team
             </ButtonLink>
           </div>
         </div>

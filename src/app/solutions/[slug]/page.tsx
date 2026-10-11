@@ -113,7 +113,7 @@ export default async function IndustryPage({ params }: { params: Promise<{ slug:
             id="demo-title"
             eyebrow="Analysis example"
             title="What the analysis looks like."
-            body="An illustrative example of the kind of output ORYN Intelligence is being designed to produce. Drag the frame to compare."
+            body="An illustrative example of the kind of output SensorDyme is being designed to produce. Drag the frame to compare."
           />
           <div className="mt-14">
             <IntelligenceDemo only={[ind.demo]} initial={ind.demo} />

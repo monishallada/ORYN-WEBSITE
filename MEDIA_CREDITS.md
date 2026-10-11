@@ -2,7 +2,7 @@
 
 All photography, footage, data, and typefaces used on the ORYN website, with sources and licenses. Licenses were verified on each source page at download time (2026-10-10). This list is also published on the site at `/credits`.
 
-> Third-party aircraft that appear in photos represent the technology category and are captioned as such. They are not ORYN products.
+> Third-party aircraft that appear in photos represent the technology category and are captioned as such. They are not ORYN products. SensorDyme Aero is shown only as an ORYN-built concept model, never with stock photography.
 
 ## Licenses in use
 
@@ -22,17 +22,13 @@ All photography, footage, data, and typefaces used on the ORYN website, with sou
 | `src/assets/intel/mead-2019.jpg`, `mead-2022.jpg`, `mead-change.jpg` | [NASA HLS](https://www.earthdata.nasa.gov/data/projects/hls) S30 via [NASA GIBS](https://gibs.earthdata.nasa.gov/) | NASA open data | 15 Jul 2019 and 19 Jul 2022; change map derived by ORYN; `scripts/intel/lake_mead.py`. |
 | Typefaces | [Geist](https://vercel.com/font) by Vercel | SIL OFL 1.1 | Loaded with `next/font/google`. |
 | ORYN logo | ORYN | Proprietary | Vector reconstruction of the supplied master artwork (`scripts/logo/`). |
+| `src/assets/edge/*.png` | SensorDyme demo (`DemoSlideshow/assets/renders`) | Proprietary (ORYN) | Renders of the SensorDyme Edge prototype industrial design, generated from the demo's procedural 3D model. Internal components are third-party parts. |
+| SensorDyme Aero 3D model | ORYN | Proprietary | Built in code (`src/components/aero/drone-model.ts`). Concept model; not finished hardware. |
 
 ## Photography and video
 
 | File | Author | Source | License | Notes |
 | --- | --- | --- | --- | --- |
-| `src/assets/img/aero-drone.jpg` | [Christopher Burns](https://unsplash.com/@christopher__burns) | [unsplash.com/photos/xoMWD3nqEGg](https://unsplash.com/photos/xoMWD3nqEGg) | Unsplash License | DJI Inspire-series aircraft (no logo visible). Captioned as representative, not ORYN hardware. |
-| `src/assets/img/aero-drone-custom.jpg` | [Josh Ogden](https://unsplash.com/@joshogden) | [unsplash.com/photos/cDTQmxoNrZA](https://unsplash.com/photos/cDTQmxoNrZA) | Unsplash License | Custom multirotor build. Captioned as representative, not ORYN hardware. |
-| `src/assets/img/aero-motor.jpg` | [Bence Balla-Schottner](https://unsplash.com/@ballaschottner) | [unsplash.com/photos/jPccMfZ2vKg](https://unsplash.com/photos/jPccMfZ2vKg) | Unsplash License | Small model text on motor; captioned as representative component imagery. |
-| `src/assets/img/aero-camera.jpg` | [Surya Devarakonda](https://unsplash.com/@suryadevarakonda) | [unsplash.com/photos/Em8pQ3EdEPw](https://unsplash.com/photos/Em8pQ3EdEPw) | Unsplash License | DJI Mavic 2 with a small brand mark; captioned as representative. |
-| `src/assets/img/aero-frame.jpg` | [ThisisEngineering](https://unsplash.com/@thisisengineering) | [unsplash.com/photos/oM_Cbj11S5Y](https://unsplash.com/photos/oM_Cbj11S5Y) | Unsplash License |  |
-| `src/assets/img/aero-electronics.jpg` | [Akshat Sharma](https://unsplash.com/@asphotographypics) | [unsplash.com/photos/S5KwkmFeX_E](https://unsplash.com/photos/S5KwkmFeX_E) | Unsplash License | Board carries manufacturer text; captioned as representative. |
 | `src/assets/img/intel-agriculture.jpg` | [Bernd Dittrich](https://unsplash.com/@hdbernd) | [unsplash.com/photos/S-kKSx7shyU](https://unsplash.com/photos/S-kKSx7shyU) | Unsplash License |  |
 | `src/assets/img/intel-construction.jpg` | [Shane McLendon](https://unsplash.com/@kctinman) | [unsplash.com/photos/EN1tF2EG-50](https://unsplash.com/photos/EN1tF2EG-50) | Unsplash License | Equipment bounding boxes hand-annotated for the detection demo. |
 | `src/assets/img/intel-flood.jpg` | [Mathis Mauprivez](https://unsplash.com/@mathisvisuals) | [unsplash.com/photos/ldodZGd4MuA](https://unsplash.com/photos/ldodZGd4MuA) | Unsplash License | Oblique view; used for the segmentation demo. |

@@ -13,9 +13,9 @@ function resolveSiteUrl(): string {
 
 export const site = {
   name: "ORYN",
-  tagline: "Autonomous Aerial Intelligence",
+  tagline: "Intelligent Physical Systems",
   description:
-    "ORYN is developing integrated aerial intelligence — custom drone systems, computer vision, and managed operations that turn aerial observation into clear, actionable information.",
+    "ORYN builds intelligent physical systems. SensorDyme, our perception and reasoning layer, powers SensorDyme Edge — on-device intelligent sensing — and SensorDyme Aero, our aerial development platform.",
   url: resolveSiteUrl(),
   /** Optional public inquiry address. Leave unset rather than inventing one. */
   contactEmail: process.env.NEXT_PUBLIC_CONTACT_EMAIL || null,
@@ -25,12 +25,18 @@ export const site = {
     "ORYN is an early-stage company. Products and capabilities described on this site are in development unless stated otherwise.",
 } as const;
 
-export type NavItem = { label: string; href: string; description?: string };
+export type NavItem = { label: string; href: string; description?: string; children?: NavItem[] };
+
+/** ORYN → SensorDyme (intelligence layer) → Edge | Aero. */
+export const sensorDymeNav: NavItem[] = [
+  { label: "SensorDyme Edge", href: "/edge", description: "Intelligent sensing, on the device" },
+  { label: "SensorDyme Aero", href: "/aero", description: "Aerial development platform" },
+  { label: "Aerial analysis", href: "/intelligence", description: "Vision & geospatial analysis of aerial imagery" },
+];
 
 export const primaryNav: NavItem[] = [
+  { label: "SensorDyme", href: "/#sensordyme", children: sensorDymeNav },
   { label: "Technology", href: "/technology" },
-  { label: "Aero", href: "/aero" },
-  { label: "Intelligence", href: "/intelligence" },
   { label: "Platform", href: "/platform" },
   { label: "Solutions", href: "/solutions" },
   { label: "About", href: "/about" },
@@ -40,8 +46,9 @@ export const footerNav: { title: string; items: NavItem[] }[] = [
   {
     title: "Products",
     items: [
-      { label: "ORYN Aero", href: "/aero" },
-      { label: "ORYN Intelligence", href: "/intelligence" },
+      { label: "SensorDyme Edge", href: "/edge" },
+      { label: "SensorDyme Aero", href: "/aero" },
+      { label: "Aerial analysis", href: "/intelligence" },
       { label: "ORYN Command", href: "/platform#command" },
       { label: "ORYN Portal", href: "/platform#portal" },
     ],
@@ -62,7 +69,7 @@ export const footerNav: { title: string; items: NavItem[] }[] = [
       { label: "Technology", href: "/technology" },
       { label: "About", href: "/about" },
       { label: "Contact", href: "/contact" },
-      { label: "Request a demo", href: "/contact?intent=demo" },
+      { label: "Talk to the team", href: "/contact?intent=demo" },
       { label: "Media credits", href: "/credits" },
     ],
   },

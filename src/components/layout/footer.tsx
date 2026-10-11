@@ -11,14 +11,14 @@ export function Footer() {
           <div className="lg:col-span-4">
             <LogoMark className="h-10 w-auto text-bone-50" />
             <p className="t-lead mt-8 max-w-sm text-bone-50/80">
-              Autonomous aerial systems and intelligence for a clearer understanding of the world below.
+              Intelligent physical systems. SensorDyme perception — on site with Edge, in development for the air with Aero.
             </p>
             <Link
               href="/contact?intent=demo"
               className="group mt-8 inline-flex items-center gap-3 text-[0.9375rem] font-medium"
             >
               <span className="border-b border-bone-50/30 pb-1 transition-colors group-hover:border-bone-50">
-                Request a demo
+                Talk to the team
               </span>
               <span aria-hidden="true" className="transition-transform group-hover:translate-x-0.5">
                 →
