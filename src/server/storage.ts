@@ -103,13 +103,23 @@ class S3Storage implements ObjectStorage {
   }
 
   async put(key: string, body: Buffer | Uint8Array, contentType: string) {
-    const res = await this.client.fetch(this.url(key), {
-      method: "PUT",
-      body: Buffer.from(body),
-      headers: { "Content-Type": contentType, ...(this.sse === "none" ? {} : { "x-amz-server-side-encryption": this.sse }) },
-    });
+    const bytes = Buffer.from(body);
+    const headers = { "Content-Type": contentType, ...(this.sse === "none" ? {} : { "x-amz-server-side-encryption": this.sse }) };
+    // Sign, then send the bytes ourselves. aws4fetch's own fetch() passes a
+    // Request object, which Next.js's patched fetch re-wraps as a stream: the
+    // upload then goes out chunked without Content-Length, and S3 services
+    // such as Railway Buckets refuse it (411 MissingContentLength). Retries
+    // 5xx/429 like aws4fetch does.
+    let res: Response;
+    for (let attempt = 0; ; attempt++) {
+      const signed = await this.client.sign(this.url(key), { method: "PUT", body: bytes, headers });
+      res = await fetch(signed.url, { method: "PUT", headers: signed.headers, body: bytes });
+      if ((res.status < 500 && res.status !== 429) || attempt >= 2) break;
+      await res.body?.cancel().catch(() => {});
+      await new Promise((r) => setTimeout(r, 100 * 2 ** attempt));
+    }
     if (!res.ok) throw new Error(`Object storage PUT failed: ${res.status}${await s3ErrorCode(res)}`);
-    return { size: body.byteLength };
+    return { size: bytes.byteLength };
   }
 
   async get(key: string): Promise<StoredObject | null> {
