@@ -9,7 +9,7 @@ import type { SummaryClient } from "@/server/reports/summarize";
 import type { ReportContent } from "@/server/reports/types";
 import { orgKey, setStorageForTesting, storage } from "@/server/storage";
 import { closeTestDb, createOrg, insertAoi, resetDb } from "../helpers/db";
-import { daysAgo, insertDetection, insertObservation, insertRun, insertWarning, insertWeather, member, rows } from "./alerts.fixtures";
+import { daysAgo, dbDaysAgo, insertDetection, insertObservation, insertRun, insertWarning, insertWeather, member, rows } from "./alerts.fixtures";
 
 const PNG_1PX = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
 
@@ -34,8 +34,9 @@ describe("reports", () => {
     await storage().put(pngKey, PNG_1PX, "image/png");
     const o1 = await insertObservation(org.id, aoi, { observedAt: daysAgo(30), mean: 0.72 });
     const bad = await insertObservation(org.id, aoi, { observedAt: daysAgo(20), status: "unusable", unusableReason: "97% of AOI pixels masked as cloud" });
+    // The data-currency statement floors (database now − observed) to whole days.
     const latest = await insertObservation(org.id, aoi, {
-      observedAt: daysAgo(4),
+      observedAt: await dbDaysAgo(4),
       mean: 0.58,
       raster: { png_key: pngKey, data_key: orgKey(org.id, "rasters", "latest.f32"), width: 1, height: 1, epsg: 32618, transform: [0, 10, 0, 0, 0, -10], corners: [[-77.601, 35.911], [-77.589, 35.911], [-77.589, 35.899], [-77.601, 35.899]], legend: { kind: "ndvi", min: -0.2, max: 0.9 } },
     });
