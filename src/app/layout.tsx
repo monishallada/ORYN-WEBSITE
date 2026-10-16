@@ -16,6 +16,9 @@ export const metadata: Metadata = {
   description: site.description,
   applicationName: site.name,
   keywords: [
+    "SensorDyme",
+    "edge AI",
+    "intelligent sensing",
     "aerial intelligence",
     "drone",
     "UAV",

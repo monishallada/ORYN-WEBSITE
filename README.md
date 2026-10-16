@@ -1,11 +1,13 @@
-# ORYN
+# ORYN — Intelligent Physical Systems
+
+ORYN is the company; **SensorDyme** is its perception and reasoning layer, shipped as two products: **SensorDyme Edge** (on-device intelligent sensing, `/edge`) and **SensorDyme Aero** (the aerial development platform, `/aero`). Aerial analysis (`/intelligence`), ORYN Command, and ORYN Portal complete the system.
 
 This repository contains two things that deploy together:
 
-1. **The public website** — marketing pages for ORYN Aero, Intelligence, Command, and Portal (`/`, `/technology`, `/solutions`, …).
+1. **The public website** — marketing pages for ORYN, SensorDyme Edge and Aero, Intelligence, Command, and Portal (`/`, `/technology`, `/edge`, `/aero`, `/solutions`, …).
 2. **The ORYN platform** — a multi-tenant geospatial intelligence application (`/app`, `/api/v1`) with a background worker. Organizations monitor areas of interest with satellite imagery, weather, official warnings, and news; ORYN computes vegetation and water indicators, finds candidate changes, evaluates alert rules, and produces evidence-linked reports.
 
-Built with Next.js 16 (App Router), TypeScript, Tailwind CSS v4, PostgreSQL + PostGIS, Better Auth, MapLibre GL, and a PostgreSQL-backed job queue.
+Built with Next.js 16 (App Router), TypeScript, Tailwind CSS v4, Motion, Three.js (product explorers, loaded on demand), PostgreSQL + PostGIS, Better Auth, MapLibre GL, and a PostgreSQL-backed job queue.
 
 > **Status.** The platform is a working foundation, not a certified system. It has not undergone a security audit, penetration test, or any compliance authorization (FedRAMP, StateRAMP, CJIS, SOC 2, …). See [`docs/SECURITY.md`](docs/SECURITY.md) for what is implemented and what remains.
 
@@ -162,31 +164,55 @@ db/
   init/                   Local Docker init (least-privilege app role, test database)
 src/
   app/
-    (marketing)/          Public website routes (layout with site header/footer)
+    (marketing)/          Public website routes, with the site header/footer layout:
+                          page.tsx (home), technology/ edge/ aero/ intelligence/ platform/
+                          solutions/ solutions/[slug]/ about/ contact/ credits/, template.tsx
     (auth)/               Sign-in (username or email), invitations, password reset
-    (platform)/app/       Platform UI (org-scoped pages under [org])
-    api/auth/             Better Auth endpoints
+    (platform)/app/       Platform UI (org-scoped pages under [org]; /app/account, /app/admin)
+    api/auth/             Better Auth endpoints (allowlisted)
     api/v1/orgs/[org]/    REST API (session or API key)
+    api/health/           Liveness and readiness checks
     api/cron/tick/        Scheduler + bounded job drain for serverless hosts
     api/contact/          Website contact form
+    layout.tsx            Root layout: fonts, metadata, JSON-LD
+    sitemap.ts robots.ts manifest.ts icon.svg apple-icon.png favicon.ico opengraph-image.png
+    globals.css           Design system: Tailwind v4 theme tokens and type scale
   components/
-    map/                  MapLibre workspace, inspectors, charts, legends
+    map/                  MapLibre workspace, inspectors, charts, legends (platform)
     platform/             Platform UI kit, forms, shell
-    auth/                 Sign-in and invitation forms
-    …                     Website components (brand, layout, home, previews, viz, …)
-  content/                Website copy and data
+    auth/                 Sign-in, invitation, and password forms
+    brand/                ORYN logo (vector, from master artwork)
+    layout/               Header, mobile menu, footer, page hero
+    home/                 Home-page sections
+    previews/             Interactive ORYN Command and ORYN Portal previews
+    viz/                  Comparison slider, demos, blueprints, mosaic, report
+    edge/                 SensorDyme Edge pipeline story & device explorer
+    aero/                 Aero 3D explorer (Three.js, loaded on demand), blueprint
+    explorer/             Shared product explorer (stage + UI) for Edge and Aero
+    tech/ contact/ media/ ui/
+  content/                Website copy and data. Edit these files to change the site.
+  assets/                 Statically imported images (blur placeholders, hashing)
   lib/                    Isomorphic helpers (geo, authz matrix, formatting, map layers)
   server/
     auth/ authz/          Better Auth configuration, sessions, org access resolution
+    accounts/             Administrator-provisioned accounts (partner, trial)
+    config/               Environment and production preflight checks
     db/                   PostgreSQL client (tenant/user/system contexts), migration runner
     aois/ orgs/ results/  Domain services (areas, administration, results read models)
     providers/            Provider adapters: STAC imagery, weather, news, reference, geocoding
     analytics/            Raster engine: COG reading, indices, masks, change detection, rendering
     pipeline/             Catalog sync, asset processing, change detection, context, reference import
-    jobs/                 Queue, worker, scheduler, handler registry
+    jobs/                 Queue, worker, scheduler, handler registry, heartbeats
     alerts/ notifications/ reports/ exports/   Alerting, delivery, reports (PDF), exports
+  instrumentation.ts      Production preflight at server start
   proxy.ts                Optimistic auth redirect + nonce CSP for platform routes
-scripts/oryn/             CLI: migrate, admin, seed, worker, e2e fixtures, maintenance
+public/
+  brand/                  Standalone logo SVGs
+  media/video/            Hero and flyover video
+  media/map/              Command preview map layers (USGS public domain)
+scripts/                  Asset-generation scripts (see scripts/README.md); build-scripts.mjs (worker/CLI bundles)
+scripts/oryn/             CLI: migrate, admin, accounts, verify, seed, worker, e2e fixtures, maintenance
+deploy/rehearsal/         Local production rehearsal configuration (local-only values)
 tests/                    unit/, integration/, e2e/ (Playwright), fixtures/, helpers/
 ```
 
@@ -198,7 +224,8 @@ tests/                    unit/, integration/, e2e/ (Playwright), fixtures/, hel
 | --- | --- |
 | Navigation, footer links, site description | `src/content/site.ts` |
 | Industry pages (copy, images, status) | `src/content/industries.ts` |
-| A1 specifications, modules, roadmap | `src/content/aero.ts` |
+| Aero specifications, modules, 3D explorer systems, roadmap | `src/content/aero.ts` |
+| SensorDyme Edge pipeline, device parts, measurements, status | `src/content/sensordyme.ts` |
 | Architecture stages, pillars, principles | `src/content/technology.ts` |
 | Command preview sample missions | `src/content/missions.ts` |
 | Intelligence demos | `src/content/intelligence.ts` |
@@ -209,8 +236,11 @@ tests/                    unit/, integration/, e2e/ (Playwright), fixtures/, hel
 
 ORYN is early-stage. The site and the platform are written to be ambitious but accurate:
 
-- **Specifications** in `src/content/aero.ts` are `null` ("To be established") until measured.
-- **Previews** on the website (Command, Portal, the Intelligence demos) remain labelled "Concept preview" / "Sample data"; they are illustrations, not the platform.
+- **Specifications** in `src/content/aero.ts` are `null` ("To be established") until they are measured. Only add a value once it has been validated.
+- **Team:** `src/content/team.ts` is empty on purpose. Add real people only; the About page shows a founder-led statement until then.
+- **Previews** on the website (Command, Portal, the Intelligence demos) are labeled "Interactive product preview", "Concept preview", "Sample data", or "Illustrative"; they are illustrations, not the platform. Keep those labels until they connect to production systems.
+- **Third-party hardware** in photos is captioned "Representative — not ORYN hardware." SensorDyme Aero is shown only as ORYN's code-built concept model, never with stock photography.
+- **SensorDyme claims** come from the SensorDyme device repository and demo. Measured figures in `src/content/sensordyme.ts` are from one prototype unit and are labeled as such.
 - **No** fabricated customers, partners, certifications, statistics, or testimonials.
 - **Platform data:** synthetic records are flagged (`is_synthetic`) and labelled in the UI; nothing is invented when a source is unavailable; candidate changes are never presented as verified events; forecasts, model estimates, observations, and claims are kept distinct.
 

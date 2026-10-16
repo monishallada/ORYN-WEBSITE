@@ -1,5 +1,5 @@
 /**
- * Illustrative ORYN Intelligence demonstrations.
+ * Illustrative SensorDyme aerial-analysis demonstrations.
  *
  * The "analyzed" images were produced from the licensed sample photographs
  * with simple, documented techniques (see `scripts/README.md`):

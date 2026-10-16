@@ -6,7 +6,7 @@ import { MARK_PATH } from "@/components/brand/logo";
 import { cn } from "@/lib/cn";
 
 /**
- * ORYN A1 — concept drawing (top view). An original illustration of the
+ * SensorDyme Aero A1 — concept drawing (top view). An original illustration of the
  * planned development platform. Not a depiction of finished hardware.
  * The fuselage silhouette is derived from the ORYN mark.
  */
@@ -86,7 +86,7 @@ export function DroneBlueprint({
       className={cn("h-auto w-full select-none text-bone-50 [&_*]:[vector-effect:non-scaling-stroke]", className)}
       fill="none"
       role="img"
-      aria-label="Concept drawing of the ORYN A1 development platform, top view, with labeled modules"
+      aria-label="Concept drawing of the SensorDyme Aero A1 development platform, top view, with labeled modules"
     >
       <defs>
         <marker id="bp-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
@@ -308,7 +308,7 @@ export function DroneBlueprint({
           <rect x="680" y="880" width="280" height="80" stroke="currentColor" strokeOpacity="0.35" />
           <line x1="680" y1="910" x2="960" y2="910" stroke="currentColor" strokeOpacity="0.35" />
           <line x1="850" y1="910" x2="850" y2="960" stroke="currentColor" strokeOpacity="0.35" />
-          <text x="692" y="901" className="fill-current font-mono text-[15px] tracking-[0.12em] opacity-80">ORYN A1 · CONCEPT</text>
+          <text x="692" y="901" className="fill-current font-mono text-[15px] tracking-[0.12em] opacity-80">AERO A1 · CONCEPT</text>
           <text x="692" y="932" className="fill-current font-mono text-[13px] tracking-[0.08em] opacity-50">TOP VIEW</text>
           <text x="692" y="951" className="fill-current font-mono text-[13px] tracking-[0.08em] opacity-50">NOT TO SCALE</text>
           <text x="862" y="932" className="fill-current font-mono text-[13px] tracking-[0.08em] opacity-50">REV 0.1</text>

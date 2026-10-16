@@ -17,11 +17,11 @@ export function AnnotatedBlueprint({ detailed = false }: { detailed?: boolean })
         <div className="tech-grid relative rounded-[3px] border border-bone-50/[0.08] bg-ink-950 p-3 text-bone-50 sm:p-6 md:p-10">
           <DroneBlueprint active={current} />
           <div className="t-mono absolute left-4 top-4 flex items-center gap-2 text-[0.6875rem] text-bone-50/50 md:left-6 md:top-6">
-            <span className="size-1.5 rounded-full bg-signal" /> ORYN A1 · Concept drawing
+            <span className="size-1.5 rounded-full bg-signal" /> Aero A1 · Concept drawing
           </div>
         </div>
         <p className="t-mono mt-3 text-[0.6875rem] text-bone-50/60">
-          Concept illustration of the A1 development platform. Final hardware design, dimensions, and specifications are not yet established.
+          Concept illustration of the SensorDyme Aero A1 development platform. Final hardware design, dimensions, and specifications are not yet established.
         </p>
       </div>
 

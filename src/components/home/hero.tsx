@@ -4,8 +4,8 @@ import { ButtonLink } from "@/components/ui/button";
 import { media, video } from "@/content/media";
 
 const products = [
-  { n: "01", name: "ORYN Aero", desc: "Modular aerial platform", href: "/aero" },
-  { n: "02", name: "ORYN Intelligence", desc: "Vision & geospatial engine", href: "/intelligence" },
+  { n: "01", name: "SensorDyme Edge", desc: "Intelligent edge sensing", href: "/edge" },
+  { n: "02", name: "SensorDyme Aero", desc: "Aerial development platform", href: "/aero" },
   { n: "03", name: "ORYN Command & Portal", desc: "Operations and delivery", href: "/platform" },
 ];
 
@@ -24,22 +24,22 @@ export function Hero() {
       <div aria-hidden="true" className="absolute inset-0 bg-[radial-gradient(ellipse_at_10%_100%,rgb(6_7_7/0.55),transparent_55%)]" />
 
       <div className="shell relative flex h-full flex-col justify-end pb-[max(2rem,env(safe-area-inset-bottom))] md:pb-10">
-        <p className="t-eyebrow animate-[fade_1.2s_var(--ease-out-expo)_0.5s_both] text-bone-50/85">ORYN — Autonomous Aerial Intelligence</p>
+        <p className="t-eyebrow animate-[fade_1.2s_var(--ease-out-expo)_0.5s_both] text-bone-50/85">ORYN — Intelligent Physical Systems</p>
         <h1 id="hero-title" className="mt-5 text-[clamp(2.6rem,13vw,11.75rem)] font-medium uppercase leading-[0.86] tracking-[-0.055em]">
           <span className="line-mask">
             <span className="block animate-[rise_1.3s_var(--ease-out-expo)_0.15s_both]">Intelligence</span>
           </span>
           <span className="line-mask">
-            <span className="block animate-[rise_1.3s_var(--ease-out-expo)_0.28s_both]">from above.</span>
+            <span className="block animate-[rise_1.3s_var(--ease-out-expo)_0.28s_both]">in the field.</span>
           </span>
         </h1>
 
         <div className="mt-8 grid gap-7 md:mt-10 md:grid-cols-12 md:items-end">
           <p className="t-lead max-w-md animate-[fade_1.4s_var(--ease-out-expo)_0.7s_both] text-bone-50/80 md:col-span-5">
-            Autonomous aerial systems and advanced intelligence for a clearer understanding of the world below.
+            ORYN builds systems that perceive and understand the physical world. SensorDyme is the intelligence — on site today with Edge, and in development for the air with Aero.
           </p>
           <div className="flex animate-[fade_1.4s_var(--ease-out-expo)_0.85s_both] flex-col gap-3 sm:flex-row md:col-span-7 md:justify-end">
-            <ButtonLink href="#system">Explore ORYN</ButtonLink>
+            <ButtonLink href="#sensordyme">Explore SensorDyme</ButtonLink>
             <ButtonLink href="/technology" variant="secondary">
               Our Technology
             </ButtonLink>

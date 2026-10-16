@@ -30,7 +30,7 @@ export function ChapterHeading({
       </h2>
       {body || aside ? (
         <div className="mt-8 grid gap-6 md:mt-10 md:grid-cols-12">
-          <div className="md:col-span-6 md:col-start-7 lg:col-span-5 lg:col-start-8">
+          <div className="min-w-0 md:col-span-6 md:col-start-7 lg:col-span-5 lg:col-start-8">
             {body ? <p className={cn("t-lead", tone === "dark" ? "text-bone-50/70" : "text-ink-900/65")}>{body}</p> : null}
             {aside ? <div className="mt-6">{aside}</div> : null}
           </div>

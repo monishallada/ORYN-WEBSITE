@@ -1,10 +1,11 @@
 import Image from "next/image";
 import { Hero } from "@/components/home/hero";
+import { SensorDymeFamily } from "@/components/home/sensordyme-family";
 import { SystemIntro } from "@/components/home/system-intro";
 import { IndustriesStack } from "@/components/home/industries-stack";
 import { ManagedSteps } from "@/components/home/managed-steps";
-import { AnnotatedBlueprint } from "@/components/aero/annotated-blueprint";
-import { ParallaxImage } from "@/components/media/parallax-image";
+import { DroneExplorer } from "@/components/aero/drone-explorer";
+import { PerceptionStory } from "@/components/edge/perception-story";
 import { IntelligenceDemo } from "@/components/viz/intelligence-demo";
 import { CommandPreview } from "@/components/previews/command-preview";
 import { PortalPreview } from "@/components/previews/portal-preview";
@@ -14,27 +15,46 @@ import { ChapterHeading } from "@/components/ui/chapter-heading";
 import { Reveal } from "@/components/ui/reveal";
 import { media } from "@/content/media";
 
-const details = [
-  { key: "aeroMotor", label: "Propulsion", note: "Brushless motor & propeller" },
-  { key: "aeroCamera", label: "Imaging", note: "Gimbal-stabilized camera" },
-  { key: "aeroFrame", label: "Structure", note: "Carbon-fiber frame build" },
-  { key: "aeroElectronics", label: "Electronics", note: "Power distribution" },
-] as const;
-
 export default function HomePage() {
   return (
     <>
       <Hero />
 
-      <SystemIntro />
+      <SensorDymeFamily />
 
-      {/* ── ORYN AERO ─────────────────────────────────────── */}
+      {/* ── SENSORDYME EDGE ───────────────────────────────── */}
+      <section aria-labelledby="edge-title" className="border-t border-bone-50/[0.06] bg-ink-900 py-28 md:py-40">
+        <div className="shell">
+          <ChapterHeading
+            id="edge-title"
+            index="02"
+            eyebrow="SensorDyme Edge"
+            title={
+              <>
+                From pixels
+                <br />
+                to decisions.
+              </>
+            }
+            body="Follow one moment through the system: what the camera sees, what SensorDyme understands, what it confirms — and what happens next. Detection, tracking, and verification all run on the device."
+            aside={<StatusTag tone="signal">Working prototype</StatusTag>}
+          />
+          <div className="mt-14 md:mt-20">
+            <PerceptionStory />
+          </div>
+          <div className="mt-14 flex justify-end">
+            <TextLink href="/edge">Explore SensorDyme Edge</TextLink>
+          </div>
+        </div>
+      </section>
+
+      {/* ── SENSORDYME AERO ───────────────────────────────── */}
       <section aria-labelledby="aero-title" className="bg-ink-950 pb-28 pt-28 md:pb-40 md:pt-40">
         <div className="shell">
           <ChapterHeading
             id="aero-title"
-            index="02"
-            eyebrow="ORYN Aero"
+            index="03"
+            eyebrow="SensorDyme Aero"
             title={
               <>
                 Engineered
@@ -42,76 +62,32 @@ export default function HomePage() {
                 to see more.
               </>
             }
-            body="Modular aerial systems designed to collect high-quality intelligence across complex environments."
-            aside={<StatusTag>ORYN A1 · In development</StatusTag>}
+            body="Designed to give SensorDyme intelligence altitude and mobility. Aero is a modular aerial development platform — airframe, propulsion, power, flight control, compute, and payload as independent modules, each one testable and replaceable."
+            aside={<StatusTag>A1 · In development</StatusTag>}
           />
-        </div>
-
-        <Reveal className="mt-16 md:mt-24">
-          <ParallaxImage image={media.aeroDrone} className="aspect-[4/3] w-full sm:aspect-[16/9] lg:aspect-[21/9]" sizes="100vw" />
-          <div className="shell">
-            <MediaNote className="mt-3">Representative commercial multirotor — not ORYN hardware. Photo: Christopher Burns / Unsplash</MediaNote>
+          <div className="mt-14 md:mt-20">
+            <DroneExplorer idPrefix="home-aero" />
           </div>
-        </Reveal>
-
-        <div className="shell mt-24 md:mt-36">
-          <div className="mb-10 grid gap-6 md:mb-14 md:grid-cols-12">
-            <h3 className="t-h3 md:col-span-5">A platform built from modules, not compromises.</h3>
-            <p className="t-body text-bone-50/60 md:col-span-5 md:col-start-8">
-              ORYN A1 is our development platform: an aircraft architecture where airframe, propulsion, power, flight control, compute, and payload are defined as independent modules — each one testable, serviceable, and replaceable.
+          <div className="mt-14 grid gap-8 border-t border-bone-50/10 pt-8 md:grid-cols-12 md:items-end">
+            <p className="t-body text-bone-50/65 md:col-span-6">
+              We integrate proven components into our own architecture — then test, characterize, and document every module before anything is published as a specification.
             </p>
-          </div>
-          <AnnotatedBlueprint />
-        </div>
-
-        <div className="shell mt-24 md:mt-36">
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-12 md:gap-4">
-            {details.map((d, i) => {
-              const img = media[d.key];
-              const layout = [
-                "col-span-2 md:col-span-7 aspect-[4/3] md:aspect-auto md:h-[min(42vw,600px)]",
-                "col-span-2 md:col-span-5 aspect-[4/3] md:aspect-auto md:h-[min(42vw,600px)]",
-                "col-span-1 md:col-span-5 aspect-[4/5] md:aspect-auto md:h-[min(30vw,420px)]",
-                "col-span-1 md:col-span-3 aspect-[4/5] md:aspect-auto md:h-[min(30vw,420px)]",
-              ][i];
-              return (
-                <Reveal as="figure" key={d.key} delay={(i % 2) * 0.08} className={layout!.split(" ").filter((c) => c.includes("col-span")).join(" ")}>
-                  <div className={`relative overflow-hidden rounded-[2px] bg-ink-850 ${layout!.split(" ").filter((c) => !c.includes("col-span")).join(" ")}`}>
-                    <Image
-                      src={img.src}
-                      alt={img.alt}
-                      fill
-                      sizes={i < 2 ? "(min-width: 768px) 55vw, 100vw" : "(min-width: 768px) 40vw, 50vw"}
-                      placeholder="blur"
-                      className="object-cover transition-transform duration-[1.6s] ease-out hover:scale-[1.03]"
-                      style={{ objectPosition: img.focal }}
-                    />
-                  </div>
-                  <figcaption className="mt-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                    <span className="text-[0.9375rem] font-medium">{d.label}</span>
-                    <span className="t-mono text-bone-50/60">{d.note}</span>
-                  </figcaption>
-                </Reveal>
-              );
-            })}
-            <div className="col-span-2 flex flex-col justify-end gap-8 border-t border-bone-50/10 pt-6 md:col-span-4 md:border-t-0 md:pt-0">
-              <p className="t-body text-bone-50/65">
-                We integrate proven components into our own architecture — then test, characterize, and document every module before anything is published as a specification.
-              </p>
-              <MediaNote>Representative component imagery from the hardware categories we are integrating. Not ORYN-manufactured parts.</MediaNote>
-              <TextLink href="/aero">Explore ORYN Aero</TextLink>
+            <div className="md:col-span-4 md:col-start-9 md:text-right">
+              <TextLink href="/aero">Explore SensorDyme Aero</TextLink>
             </div>
           </div>
         </div>
       </section>
+
+      <SystemIntro index="04" />
 
       {/* ── ORYN INTELLIGENCE ─────────────────────────────── */}
       <section aria-labelledby="intel-title" className="border-t border-bone-50/[0.06] bg-ink-900 py-28 md:py-40">
         <div className="shell">
           <ChapterHeading
             id="intel-title"
-            index="03"
-            eyebrow="ORYN Intelligence"
+            index="05"
+            eyebrow="SensorDyme · Aerial analysis"
             title={
               <>
                 Every frame.
@@ -119,13 +95,13 @@ export default function HomePage() {
                 More intelligence.
               </>
             }
-            body="Computer vision and geospatial analysis that turn raw aerial imagery into maps, detections, and measurements. Drag the frame to compare."
+            body="What SensorDyme is being developed to do with aerial imagery: turn it into maps, detections, and measurements. Drag the frame to compare."
           />
           <div className="mt-14 md:mt-20">
             <IntelligenceDemo />
           </div>
           <div className="mt-14 flex justify-end">
-            <TextLink href="/intelligence">Explore ORYN Intelligence</TextLink>
+            <TextLink href="/intelligence">Explore aerial analysis</TextLink>
           </div>
         </div>
       </section>
@@ -136,7 +112,7 @@ export default function HomePage() {
         <div className="shell relative">
           <ChapterHeading
             id="command-title"
-            index="04"
+            index="06"
             eyebrow="ORYN Command"
             title={
               <>
@@ -180,7 +156,7 @@ export default function HomePage() {
         <div className="shell py-28 md:py-40">
           <ChapterHeading
             id="apps-title"
-            index="05"
+            index="07"
             eyebrow="Applications"
             title={
               <>
@@ -200,7 +176,7 @@ export default function HomePage() {
         <div className="shell">
           <ChapterHeading
             id="managed-title"
-            index="06"
+            index="08"
             eyebrow="The managed experience"
             tone="light"
             title={
@@ -223,7 +199,7 @@ export default function HomePage() {
         <div className="shell">
           <ChapterHeading
             id="portal-title"
-            index="07"
+            index="09"
             eyebrow="ORYN Portal"
             tone="light"
             title={
@@ -284,12 +260,12 @@ export default function HomePage() {
             Let&apos;s see what&apos;s possible.
           </h2>
           <p className="t-lead mx-auto mt-6 max-w-xl text-bone-50/70">
-            We&apos;re looking for early partners who want to shape how aerial intelligence works in their industry.
+            We&apos;re looking for early partners who want to shape how intelligent sensing — on the ground and in the air — works in their industry.
           </p>
           <div className="mt-10 flex flex-col justify-center gap-3 sm:flex-row">
-            <ButtonLink href="/contact?intent=demo">Request a demo</ButtonLink>
-            <ButtonLink href="/contact" variant="secondary">
-              Contact us
+            <ButtonLink href="/contact?intent=demo">Talk to the team</ButtonLink>
+            <ButtonLink href="/technology" variant="secondary">
+              See the system
             </ButtonLink>
           </div>
         </div>

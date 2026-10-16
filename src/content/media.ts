@@ -8,12 +8,6 @@ import type { StaticImageData } from "next/image";
 
 import aboutEarth from "@/assets/img/about-earth.jpg";
 import aboutWorkshop from "@/assets/img/about-workshop.jpg";
-import aeroCamera from "@/assets/img/aero-camera.jpg";
-import aeroDroneCustom from "@/assets/img/aero-drone-custom.jpg";
-import aeroDrone from "@/assets/img/aero-drone.jpg";
-import aeroElectronics from "@/assets/img/aero-electronics.jpg";
-import aeroFrame from "@/assets/img/aero-frame.jpg";
-import aeroMotor from "@/assets/img/aero-motor.jpg";
 import agriculture2 from "@/assets/img/agriculture-2.jpg";
 import construction2 from "@/assets/img/construction-2.jpg";
 import contact from "@/assets/img/contact.jpg";
@@ -43,12 +37,6 @@ export type MediaImage = { src: StaticImageData; alt: string; focal: string; cre
 export const media = {
   aboutEarth: { src: aboutEarth, alt: "High-altitude view of the Earth's curvature over a coastline of lakes and forests, with a band of clouds and deep blue sky above.", focal: "50% 60%", credit: "Photo: Dembee Tsogoo / Unsplash" },
   aboutWorkshop: { src: aboutWorkshop, alt: "Engineering workbench with a bench power supply, soldering station, helping hands, wire spools and FPV drone parts.", focal: "50% 50%", credit: "Photo: ThisisEngineering / Unsplash" },
-  aeroCamera: { src: aeroCamera, alt: "Moody close-up of a drone's gimbal camera and sensor housing lit in teal and orange on a dark desk.", focal: "40% 55%", credit: "Photo: Surya Devarakonda / Unsplash" },
-  aeroDroneCustom: { src: aeroDroneCustom, alt: "Custom heavy-lift multirotor with exposed electronics and an orange cylindrical payload, landed on snow.", focal: "45% 45%", credit: "Photo: Josh Ogden / Unsplash" },
-  aeroDrone: { src: aeroDrone, alt: "Professional quadcopter with a gimbal camera hovering low above grass against a dark forest backdrop.", focal: "50% 45%", credit: "Photo: Christopher Burns / Unsplash" },
-  aeroElectronics: { src: aeroElectronics, alt: "Macro of a black power-distribution circuit board held in helping-hand clamps against a dark background.", focal: "50% 45%", credit: "Photo: Akshat Sharma / Unsplash" },
-  aeroFrame: { src: aeroFrame, alt: "Custom carbon-fiber FPV drone build on a green cutting mat, with screwdrivers, a Raspberry Pi board and a laptop on the workbench.", focal: "45% 55%", credit: "Photo: ThisisEngineering / Unsplash" },
-  aeroMotor: { src: aeroMotor, alt: "Close-up of a black brushless motor and carbon-fiber propeller on a large industrial multirotor, with a dark, blurred workshop behind.", focal: "50% 55%", credit: "Photo: Bence Balla-Schottner / Unsplash" },
   agriculture2: { src: agriculture2, alt: "Abstract top-down view of parallel vineyard rows catching low golden light.", focal: "50% 50%", credit: "Photo: Erik Fabian / Unsplash" },
   construction2: { src: construction2, alt: "Top-down aerial of an excavator digging a long trench beside spoil piles in warm evening light.", focal: "30% 50%", credit: "Photo: Built Robotics / Unsplash" },
   contact: { src: contact, alt: "Night aerial of a vast city grid of lights stretching to the horizon under a deep blue sky.", focal: "50% 70%", credit: "Photo: Benni Talent / Unsplash" },
