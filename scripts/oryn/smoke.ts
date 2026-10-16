@@ -110,7 +110,7 @@ async function main() {
   });
 
   await step("sign-in rejects unknown credentials", async () => {
-    const res = await post("/api/auth/sign-in/username", { username: `smoke-${Date.now().toString(36)}`, password: "not-a-real-password-0000" });
+    const res = await post("/api/auth/sign-in/username", { username: `smoke_${Date.now().toString(36)}`, password: "not-a-real-password-0000" });
     const body = await json(res);
     if (websiteOnly) {
       check("sign-in is unavailable without the platform", res.status === 503, `HTTP ${res.status}`);
