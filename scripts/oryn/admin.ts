@@ -12,6 +12,7 @@
  */
 import { randomBytes } from "node:crypto";
 import { loadEnvConfig } from "@next/env";
+import { postgresTlsOptions } from "@/server/db/tls";
 
 function arg(name: string): string | undefined {
   const i = process.argv.indexOf(`--${name}`);
@@ -28,7 +29,7 @@ async function main() {
   ]);
   const ownerUrl = process.env.DATABASE_OWNER_URL;
   if (!ownerUrl) throw new Error("DATABASE_OWNER_URL is required.");
-  const owner = postgres(ownerUrl, { max: 1, onnotice: () => {} });
+  const owner = postgres(ownerUrl, { ...postgresTlsOptions(ownerUrl), max: 1, onnotice: () => {} });
   const cmd = process.argv[2];
   const email = arg("email")?.toLowerCase();
   try {

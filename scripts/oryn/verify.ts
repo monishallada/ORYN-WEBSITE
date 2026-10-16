@@ -16,6 +16,7 @@
  * production until they pass here AND are added to ORYN_VERIFIED_INTEGRATIONS.
  */
 import { loadEnvConfig } from "@next/env";
+import { postgresTlsOptions } from "@/server/db/tls";
 
 const TARBORO: [number, number] = [-77.535, 35.896];
 
@@ -51,7 +52,7 @@ async function main() {
         const { checkDatabase } = await import("@/server/config/preflight");
         const url = process.env.DATABASE_URL;
         if (!url) return fail("DATABASE_URL is not set.");
-        const sql = postgres(url, { max: 1, onnotice: () => {} });
+        const sql = postgres(url, { ...postgresTlsOptions(url), max: 1, onnotice: () => {} });
         try {
           const issues = await checkDatabase(sql, "web");
           if (!issues.length) ok("application role cannot bypass RLS, every tenant table has RLS, migrations match this release");
