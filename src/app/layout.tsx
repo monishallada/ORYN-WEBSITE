@@ -1,7 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { Header } from "@/components/layout/header";
-import { Footer } from "@/components/layout/footer";
 import { Providers } from "@/components/layout/providers";
 import { site } from "@/content/site";
 import "./globals.css";
@@ -72,11 +70,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         >
           Skip to content
         </a>
-        <Providers>
-          <Header />
-          <main id="main">{children}</main>
-          <Footer />
-        </Providers>
+        <Providers>{children}</Providers>
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(orgJsonLd) }}

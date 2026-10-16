@@ -3,7 +3,7 @@ import { ButtonLink } from "@/components/ui/button";
 
 export default function NotFound() {
   return (
-    <section className="tech-grid relative flex min-h-[100svh] items-center bg-ink-950 text-bone-50">
+    <main id="main" className="tech-grid relative flex min-h-[100svh] items-center bg-ink-950 text-bone-50">
       <div className="shell py-32">
         <LogoMark className="h-12 w-auto text-bone-50/80" aria-hidden="true" />
         <p className="t-eyebrow mt-10 text-bone-50/50">Error 404</p>
@@ -16,6 +16,6 @@ export default function NotFound() {
           </ButtonLink>
         </div>
       </div>
-    </section>
+    </main>
   );
 }

@@ -1,0 +1,9 @@
+{
+  "identities": [
+    {
+      "name": "oryn-rehearsal",
+      "credentials": [{ "accessKey": "oryn-rehearsal-access-key", "secretKey": "oryn-rehearsal-secret-key-local-only" }],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}

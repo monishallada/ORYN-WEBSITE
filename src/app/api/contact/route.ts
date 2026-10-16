@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { INDUSTRY_OPTIONS, INTENT_OPTIONS, type ContactResponse } from "@/lib/contact-schema";
+import { integrationEnabled } from "@/server/integrations";
 
 export const runtime = "nodejs";
 
@@ -78,7 +79,8 @@ export async function POST(req: Request) {
 
   const { RESEND_API_KEY, CONTACT_TO_EMAIL, CONTACT_FROM_EMAIL } = process.env;
 
-  if (RESEND_API_KEY && CONTACT_TO_EMAIL && CONTACT_FROM_EMAIL) {
+  // In production, email stays off until verified in this deployment (src/server/integrations.ts).
+  if (RESEND_API_KEY && CONTACT_TO_EMAIL && CONTACT_FROM_EMAIL && integrationEnabled("email")) {
     try {
       const res = await fetch("https://api.resend.com/emails", {
         method: "POST",
@@ -107,6 +109,6 @@ export async function POST(req: Request) {
     return json({ ok: true, mode: "development" });
   }
 
-  console.error("[contact] Submission received but email delivery is not configured (set RESEND_API_KEY, CONTACT_TO_EMAIL, CONTACT_FROM_EMAIL).");
+  console.error("[contact] Submission received but email delivery is not available (set RESEND_API_KEY, CONTACT_TO_EMAIL, CONTACT_FROM_EMAIL, and verify email — see docs/DEPLOYMENT.md).");
   return json({ ok: false, error: "not_configured" }, 503);
 }

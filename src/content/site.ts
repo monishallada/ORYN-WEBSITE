@@ -19,8 +19,12 @@ export const site = {
   url: resolveSiteUrl(),
   /** Optional public inquiry address. Leave unset rather than inventing one. */
   contactEmail: process.env.NEXT_PUBLIC_CONTACT_EMAIL || null,
-  /** Future ORYN Command application (separate deployment / subdomain). */
-  commandUrl: process.env.NEXT_PUBLIC_COMMAND_URL || null,
+  /**
+   * Where "Sign in" points: an external platform deployment when
+   * NEXT_PUBLIC_COMMAND_URL is set, the built-in platform when
+   * NEXT_PUBLIC_PLATFORM_ENABLED=true, otherwise hidden.
+   */
+  commandUrl: process.env.NEXT_PUBLIC_COMMAND_URL || (process.env.NEXT_PUBLIC_PLATFORM_ENABLED === "true" ? "/login" : null),
   stageNote:
     "ORYN is an early-stage company. Products and capabilities described on this site are in development unless stated otherwise.",
 } as const;
