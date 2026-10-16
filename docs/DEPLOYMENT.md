@@ -51,7 +51,7 @@ A service whose `RAILWAY_DOCKERFILE_PATH` is missing builds the root `Dockerfile
 
 * Build-time (web): `NEXT_PUBLIC_PLATFORM_ENABLED=true` and `NEXT_PUBLIC_SITE_URL=https://<generated>.up.railway.app` must be set **before the first web build** — Railway passes service variables to the `ARG`s declared in `Dockerfile.web`, and they are compiled in. Changing them requires a rebuild.
 * Runtime (web): `BETTER_AUTH_URL=https://<generated>.up.railway.app`, `BETTER_AUTH_SECRET`, `DATABASE_URL` (the `oryn_app` role — use a Railway variable reference to the database service's private host with the `oryn_app` credentials, never the template's admin user), `ORYN_STORAGE_DRIVER=s3` and `ORYN_S3_*`.
-* Runtime (worker): the same `DATABASE_URL`, `BETTER_AUTH_SECRET`, storage variables, and provider variables (`NWS_USER_AGENT` with a contact, optional keys). **Not** `DATABASE_OWNER_URL`.
+* Runtime (worker): the same `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` (the worker builds links in alert emails from it and names it as the contact in provider User-Agents — without it both say `http://localhost:3000`), storage variables, and provider variables (`NWS_USER_AGENT` with a contact, optional keys). **Not** `DATABASE_OWNER_URL`.
 * `ORYN_TRUSTED_PROXIES`: leave unset at first and check that sign-in rate limits are per client (several failed sign-ins from one address must not lock out another address). Railway's forwarding header format has not been verified here.
 * The private network between Railway services does not use TLS; the preflight `db_tls` warning is expected for a `*.railway.internal` host and is not an error.
 
@@ -141,7 +141,7 @@ Secrets (●) belong in the platform's secret store, never in images, files in t
 | `DATABASE_URL` ● | web/worker | yes | `oryn_app` role, `?sslmode=verify-full` |
 | `DATABASE_OWNER_URL` ● | migrate, `admin.mjs grant/revoke` | migrate only | `oryn_owner`. **Not** in web/worker (preflight warns) |
 | `BETTER_AUTH_SECRET` ● | web/worker | yes | `openssl rand -base64 48`; preflight refuses short/known/low-variety values |
-| `BETTER_AUTH_URL` | web | yes | Public `https://` URL |
+| `BETTER_AUTH_URL` | web/worker | yes | Public `https://` URL. The worker uses it for links in alert emails and as the provider User-Agent contact |
 | `NEXT_PUBLIC_PLATFORM_ENABLED`, `NEXT_PUBLIC_SITE_URL` | web (build args) | yes | Compiled in at build time |
 | `ORYN_STORAGE_DRIVER=s3` | web/worker | yes | `local` is refused unless `ORYN_ALLOW_LOCAL_STORAGE_IN_PRODUCTION=true` (single server, persistent backed-up disk) |
 | `ORYN_S3_BUCKET`, `ORYN_S3_REGION` | web/worker | yes | |
