@@ -6,9 +6,9 @@ This is the deployment contract for the ORYN web service and background worker: 
 
 | Service | Image / command | Runs | Needs |
 | --- | --- | --- | --- |
-| **web** | `docker build --target web` → `node server.js` (port 3000) | Continuously, ≥ 1 replica behind HTTPS | PostgreSQL (app role), S3 bucket |
-| **worker** | `docker build --target worker` → `node dist/worker.mjs` (health port 8081) | Continuously, ≥ 1 replica. **Not** serverless: imagery processing is CPU- and network-heavy and jobs run for minutes | PostgreSQL (app role), S3 bucket, outbound HTTPS to providers |
-| **migrate** | worker image → `node dist/migrate.mjs` | Once per release, **before** web/worker start | PostgreSQL (owner role) |
+| **web** | `Dockerfile.web` → `node server.js` (listens on `PORT`, default 3000) | Continuously, ≥ 1 replica behind HTTPS | PostgreSQL (app role), S3 bucket |
+| **worker** | `Dockerfile.worker` → `node dist/worker.mjs` (health server on `ORYN_WORKER_HEALTH_PORT`, else `PORT`, default 8081) | Continuously, ≥ 1 replica. **Not** serverless: imagery processing is CPU- and network-heavy and jobs run for minutes | PostgreSQL (app role), S3 bucket, outbound HTTPS to providers |
+| **migrate** | `Dockerfile.worker` image → `node dist/migrate.mjs` | Once per release, **before** web/worker start | PostgreSQL (owner role) |
 | PostgreSQL | managed or self-hosted | — | PostgreSQL 15+ with PostGIS 3.4+ and `citext` (tested: 17 / 3.5) |
 | Object storage | S3-compatible, **private** bucket | — | SigV4 credentials; SSE-S3 (default) |
 
@@ -20,13 +20,54 @@ The optional `/api/cron/tick` endpoint (scheduler tick + up to 25 jobs) exists f
 
 ## Build
 
+Each service has its own Dockerfile whose **final stage is that service**, so no build-target selection is needed (some platforms, including Railway, cannot select a target stage):
+
 ```bash
-docker build --target web    -t oryn-web:$VERSION    --build-arg ORYN_APP_VERSION=$VERSION \
+docker build -f Dockerfile.web    -t oryn-web:$VERSION    --build-arg ORYN_APP_VERSION=$VERSION \
   --build-arg NEXT_PUBLIC_PLATFORM_ENABLED=true --build-arg NEXT_PUBLIC_SITE_URL=https://oryn.example.org .
-docker build --target worker -t oryn-worker:$VERSION --build-arg ORYN_APP_VERSION=$VERSION .
+docker build -f Dockerfile.worker -t oryn-worker:$VERSION --build-arg ORYN_APP_VERSION=$VERSION .
 ```
 
-`NEXT_PUBLIC_*` values are compiled into the web build (marketing pages are prerendered) — pass them as build args. No secret is needed or read at build time; `.dockerignore` keeps `.env*` files out of the build context. Images run as the unprivileged `node` user.
+The root `Dockerfile` intentionally fails with a message naming the two service Dockerfiles, so a platform that builds `./Dockerfile` by default cannot deploy the wrong service by accident.
+
+`NEXT_PUBLIC_*` values are compiled into the web build (marketing pages are prerendered) — pass them as build args. No secret is needed or read at build time; `.dockerignore` keeps `.env*` files out of the build context. Images run as the unprivileged `node` user and start node directly (exec form), so SIGTERM reaches the process. `ORYN_APP_VERSION` may be omitted: the version then falls back to `RAILWAY_GIT_COMMIT_SHA` (or `VERCEL_GIT_COMMIT_SHA`) at runtime, else `dev`.
+
+## Railway
+
+This section is the exact Railway setup for the images above. It uses only documented service settings and variables — `RAILWAY_DOCKERFILE_PATH` selects each service's Dockerfile — and adds **no** `railway.json`: Railway documents Config as Code as deprecated (existing files work for legacy services until 2026-12-01, superseded by Infrastructure as Code). None of this has been deployed; verify each setting in the Railway dashboard as you create the services.
+
+Create one Railway **project** with these services, all connected to this GitHub repository (except the database):
+
+| Service | Source | Key settings |
+| --- | --- | --- |
+| `oryn-db` | A PostgreSQL template **with PostGIS** (e.g. "PG 17 + PostGIS 3.5", matching what was tested). Railway's default PostgreSQL is not documented to include PostGIS | Run `db/production/roles.sql` once as its admin user (One-time setup, step 1) |
+| `oryn-migrate` | GitHub repo | Variable `RAILWAY_DOCKERFILE_PATH=Dockerfile.worker`; **Custom start command** `node dist/migrate.mjs`; **Restart policy** Never; no health check, no public domain; variables: `DATABASE_OWNER_URL` (and `NODE_ENV=production`, already set in the image). Nothing else — it is the only service with owner credentials |
+| `oryn-worker` | GitHub repo | Variable `RAILWAY_DOCKERFILE_PATH=Dockerfile.worker` (default start command `node dist/worker.mjs`); **Health check path** `/readyz`; variable `PORT=8081` (the health server listens on `PORT`; setting it makes the probed port explicit); `RAILWAY_DEPLOYMENT_DRAINING_SECONDS=45` (default is 0 — without it in-flight jobs are killed instead of drained); restart policy On failure; **no public domain** |
+| `oryn-web` | GitHub repo | Variable `RAILWAY_DOCKERFILE_PATH=Dockerfile.web`; **Health check path** `/api/health/ready` (200 only when the database, migrations, and storage work); generate a domain (the `https://…up.railway.app` URL); `RAILWAY_DEPLOYMENT_DRAINING_SECONDS=10`; Railway injects `PORT` and the server listens on it |
+
+A service whose `RAILWAY_DOCKERFILE_PATH` is missing builds the root `Dockerfile`, which fails on purpose with an explanation.
+
+**Variables.** Use the production checklist below. Railway specifics:
+
+* Build-time (web): `NEXT_PUBLIC_PLATFORM_ENABLED=true` and `NEXT_PUBLIC_SITE_URL=https://<generated>.up.railway.app` must be set **before the first web build** — Railway passes service variables to the `ARG`s declared in `Dockerfile.web`, and they are compiled in. Changing them requires a rebuild.
+* Runtime (web): `BETTER_AUTH_URL=https://<generated>.up.railway.app`, `BETTER_AUTH_SECRET`, `DATABASE_URL` (the `oryn_app` role — use a Railway variable reference to the database service's private host with the `oryn_app` credentials, never the template's admin user), `ORYN_STORAGE_DRIVER=s3` and `ORYN_S3_*`.
+* Runtime (worker): the same `DATABASE_URL`, `BETTER_AUTH_SECRET`, storage variables, and provider variables (`NWS_USER_AGENT` with a contact, optional keys). **Not** `DATABASE_OWNER_URL`.
+* `ORYN_TRUSTED_PROXIES`: leave unset at first and check that sign-in rate limits are per client (several failed sign-ins from one address must not lock out another address). Railway's forwarding header format has not been verified here.
+* The private network between Railway services does not use TLS; the preflight `db_tls` warning is expected for a `*.railway.internal` host and is not an error.
+
+**Deployment order — first deploy and every release with new migrations**
+
+1. `oryn-db` running; `roles.sql` applied once.
+2. Deploy `oryn-migrate`; its log must end with `migrations: N applied, M already applied` and the deployment must exit successfully. To inspect without changing anything, temporarily set its start command to `node dist/migrate.mjs --status`.
+3. Deploy `oryn-worker`; wait until its health check (`/readyz`) passes.
+4. Deploy `oryn-web`; wait until `/api/health/ready` passes; open the generated URL.
+5. One-off checks from the worker image (Railway shell/one-off run on `oryn-worker`, which has the app-role variables): `node dist/verify.mjs database`, `node dist/verify.mjs storage`.
+
+If web or worker deploy before migrations are applied, their preflight refuses to start (`migrations_pending`), the health check fails, and Railway keeps the previous deployment serving — redeploy them after step 2. Releases without migrations can deploy worker and web directly (`oryn-migrate` just reports "0 applied").
+
+Alternative to the `oryn-migrate` service: a **Pre-deploy command** `node dist/migrate.mjs` on `oryn-worker` runs migrations before every worker deploy, in a separate container from the worker image. It needs `DATABASE_OWNER_URL` in the worker's variables (the preflight warns `owner_url_in_service`), so the dedicated service is the least-privilege choice. The web image does not contain the migration runner.
+
+**Not done here:** no Railway project, service, database, bucket, domain, or variable has been created; the PostGIS template, the injected `PORT`, draining behaviour, and forwarding headers are as documented by Railway, not verified on a deployment.
 
 ## One-time setup
 
@@ -55,7 +96,7 @@ docker run --rm -e DATABASE_OWNER_URL oryn-worker:$NEW node dist/migrate.mjs --s
 docker run --rm -e DATABASE_OWNER_URL -e ORYN_SERVICE=migrate oryn-worker:$NEW node dist/migrate.mjs
 # 3. Roll out worker, then web. Each refuses to start if migrations are pending,
 #    the app role can bypass RLS, or the configuration is unsafe (preflight).
-# 4. Check: GET /api/health/ready → 200; worker GET :8081/readyz → 200;
+# 4. Check: GET /api/health/ready → 200; worker GET :<health port>/readyz → 200;
 docker run --rm --env-file web.env oryn-worker:$NEW node dist/verify.mjs database
 docker run --rm --env-file web.env oryn-worker:$NEW node dist/verify.mjs storage
 ```
@@ -85,8 +126,8 @@ Each migration also takes `lock_timeout = 15s`, so a migration that cannot get a
 | --- | --- |
 | web `GET /api/health` | Liveness — the process serves requests. No dependencies. |
 | web `GET /api/health/ready` | Readiness — `200` only when a query as the app role works, migrations match this release, and a storage write/read/delete succeeds (cached 60 s). Reports worker heartbeat freshness (informational). Returns states only, never error text. |
-| worker `GET :8081/healthz` | Loop alive (not stuck) |
-| worker `GET :8081/readyz` | Loop alive and the database answered within the last minute |
+| worker `GET :<port>/healthz` | Loop alive (not stuck). Port: `ORYN_WORKER_HEALTH_PORT`, else `PORT` (production), image default 8081 |
+| worker `GET :<port>/readyz` | Loop alive and the database answered within the last minute |
 
 Both images declare a Docker `HEALTHCHECK`. Logs are JSON lines (`t`, `level`, `msg`, `svc`, fields) on stdout/stderr with credentials, bearer tokens, API keys, and signed-URL query strings redacted; Next.js's own startup lines are plain text. Alert on: `preflight` errors, `job.failed` with `next: "dead"` or `"failed"`, `readiness.check_failed`, `worker.fatal`, and provider status `unavailable` for > 2 h.
 
@@ -111,7 +152,7 @@ Secrets (●) belong in the platform's secret store, never in images, files in t
 | `ORYN_API_CONTACT_EMAIL` | worker | recommended | Sent in provider User-Agents |
 | `OVERPASS_URL` | worker | recommended | Dedicated instance; the public one is fair-use and caps results |
 | `ORYN_TRUSTED_PROXIES` | web | behind multi-hop proxies | CIDRs; otherwise sign-in rate limits share one bucket |
-| `ORYN_WORKER_HEALTH_PORT` | worker | no | Image default 8081 |
+| `ORYN_WORKER_HEALTH_PORT` | worker | no | Overrides the health port; otherwise `PORT` (image default 8081) |
 | `ORYN_WORKER_CONCURRENCY`, `ORYN_WORKER_POLL_MS`, `ORYN_SCHEDULER_INTERVAL_MS` | worker | no | Defaults 2 / 2000 / 60000 |
 | `ORYN_CRON_SECRET` ● | web | only if `/api/cron/tick` is used | ≥ 32 random characters |
 | `OPEN_METEO_API_KEY` ● | worker | for Open-Meteo | Commercial licence. Without it Open-Meteo is **off** in production |

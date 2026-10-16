@@ -3,8 +3,8 @@
 #   docker compose up -d db                      # PostgreSQL 17 + PostGIS 3.5
 #   docker compose --profile s3 up -d s3         # S3-compatible storage (SeaweedFS) for
 #                                                # tests/integration/storage-s3.test.ts
-#   docker compose --profile rehearsal up --build   # production images (web, worker,
-#                                                # migrate) against local db + s3;
+#   docker compose --profile rehearsal up --build   # production images (Dockerfile.web,
+#                                                # Dockerfile.worker) against local db + s3;
 #                                                # see docs/DEPLOYMENT.md → Local rehearsal
 #
 # The image is the multi-architecture build of postgis/postgis (the official
@@ -54,7 +54,7 @@ services:
   migrate:
     profiles: ["rehearsal"]
     image: oryn-worker:rehearsal
-    build: { context: ., target: worker, args: { NEXT_PUBLIC_PLATFORM_ENABLED: "true", ORYN_APP_VERSION: rehearsal } }
+    build: { context: ., dockerfile: Dockerfile.worker, args: { NEXT_PUBLIC_PLATFORM_ENABLED: "true", ORYN_APP_VERSION: rehearsal } }
     command: ["node", "dist/migrate.mjs"]
     env_file: deploy/rehearsal/rehearsal.env
     environment:
@@ -66,7 +66,7 @@ services:
   web:
     profiles: ["rehearsal"]
     image: oryn-web:rehearsal
-    build: { context: ., target: web, args: { NEXT_PUBLIC_PLATFORM_ENABLED: "true", ORYN_APP_VERSION: rehearsal } }
+    build: { context: ., dockerfile: Dockerfile.web, args: { NEXT_PUBLIC_PLATFORM_ENABLED: "true", ORYN_APP_VERSION: rehearsal } }
     env_file: deploy/rehearsal/rehearsal.env
     environment:
       BETTER_AUTH_SECRET: ${ORYN_REHEARSAL_AUTH_SECRET:-}
@@ -79,7 +79,7 @@ services:
   worker:
     profiles: ["rehearsal"]
     image: oryn-worker:rehearsal
-    build: { context: ., target: worker, args: { NEXT_PUBLIC_PLATFORM_ENABLED: "true", ORYN_APP_VERSION: rehearsal } }
+    build: { context: ., dockerfile: Dockerfile.worker, args: { NEXT_PUBLIC_PLATFORM_ENABLED: "true", ORYN_APP_VERSION: rehearsal } }
     env_file: deploy/rehearsal/rehearsal.env
     environment:
       BETTER_AUTH_SECRET: ${ORYN_REHEARSAL_AUTH_SECRET:-}

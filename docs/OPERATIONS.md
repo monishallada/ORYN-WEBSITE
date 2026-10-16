@@ -4,8 +4,8 @@
 
 | Component | Requirement |
 | --- | --- |
-| Web app | Container image `--target web` (`node server.js`), or Node.js 20.9+ with `npm ci && npm run build && npm run start`. Stateless; scale horizontally. See [DEPLOYMENT.md](DEPLOYMENT.md). |
-| Worker | Container image `--target worker` (`node dist/worker.mjs`), or `npm run worker`. One or more replicas — jobs are claimed with `FOR UPDATE SKIP LOCKED`, so replicas never run the same job. Scheduler enqueues are idempotent per time bucket. |
+| Web app | Container image from `Dockerfile.web` (`node server.js`), or Node.js 20.9+ with `npm ci && npm run build && npm run start`. Stateless; scale horizontally. See [DEPLOYMENT.md](DEPLOYMENT.md). |
+| Worker | Container image from `Dockerfile.worker` (`node dist/worker.mjs`), or `npm run worker`. One or more replicas — jobs are claimed with `FOR UPDATE SKIP LOCKED`, so replicas never run the same job. Scheduler enqueues are idempotent per time bucket. |
 | Database | PostgreSQL 15+ with PostGIS 3.4+. Two roles: schema owner (migrations, admin CLI) and `oryn_app` (member of `oryn_app_role`, **no** superuser, **no** BYPASSRLS). |
 | Object storage | S3-compatible bucket (`ORYN_STORAGE_DRIVER=s3`) for any multi-instance deployment. Objects are written with SSE (AES256). Block public access. |
 | Email (optional) | Resend API key and a verified sender (`RESEND_API_KEY`, `ORYN_EMAIL_FROM`). |
