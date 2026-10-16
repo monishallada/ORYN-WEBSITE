@@ -32,10 +32,26 @@ import { log } from "@/server/log";
 type GlobalWithPool = typeof globalThis & { __orynAuthPool?: Pool };
 const g = globalThis as GlobalWithPool;
 
+/**
+ * `sslmode=require` means "encrypt, do not verify the certificate" in libpq
+ * and in postgres.js (ORYN's other client), but `pg` treats it as
+ * verify-full, which refuses the self-signed certificates of private-network
+ * databases (e.g. Railway). Give `pg` the libpq meaning so one DATABASE_URL
+ * works for both clients. Every other mode is passed through unchanged, so
+ * `verify-full` still verifies. (`pg` lets the URL's sslmode override an
+ * explicit `ssl` option, hence it is removed from the URL.)
+ */
+export function pgConnectionOptions(url: string): { connectionString: string; ssl?: { rejectUnauthorized: false } } {
+  const u = new URL(url);
+  if (u.searchParams.get("sslmode") !== "require") return { connectionString: url };
+  u.searchParams.delete("sslmode");
+  return { connectionString: u.toString(), ssl: { rejectUnauthorized: false } };
+}
+
 export function authPool(): Pool {
   if (!g.__orynAuthPool) {
     g.__orynAuthPool = new Pool({
-      connectionString: env.databaseUrl(),
+      ...pgConnectionOptions(env.databaseUrl()),
       max: 5,
       idleTimeoutMillis: 30_000,
       application_name: "oryn-auth",

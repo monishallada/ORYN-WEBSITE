@@ -91,3 +91,16 @@ describe("container platform fallbacks", () => {
     expect(env.appVersion()).toBe("dev");
   });
 });
+
+describe("database TLS on private networks", () => {
+  it("gives pg the libpq meaning of sslmode=require (encrypt, no verification); other modes pass through", async () => {
+    const { pgConnectionOptions } = await import("@/server/auth/options");
+    expect(pgConnectionOptions("postgres://u:p@db.railway.internal:5432/railway?sslmode=require&application_name=x")).toEqual({
+      connectionString: "postgres://u:p@db.railway.internal:5432/railway?application_name=x",
+      ssl: { rejectUnauthorized: false },
+    });
+    for (const url of ["postgres://u:p@db.example.org/oryn?sslmode=verify-full", "postgres://u:p@localhost/oryn"]) {
+      expect(pgConnectionOptions(url)).toEqual({ connectionString: url });
+    }
+  });
+});
