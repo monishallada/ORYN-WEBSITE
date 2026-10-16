@@ -61,9 +61,9 @@
 ### A — Agricultural monitoring
 1. A user signs in (Better Auth) and opens the organization; the server resolves membership and role.
 2. Fields are drawn on the map, uploaded as GeoJSON, or created via the API. Creation validates geometry in PostGIS, records boundary provenance, audits, and **queues a 180-day imagery backfill and a context refresh**.
-3. The worker searches Sentinel-2 L2A (Earth Search) and Landsat C2 L2 (Planetary Computer), links matching scenes, and analyzes each: NDVI/NDWI per pixel from surface reflectance, cloud/shadow masking (SCL / QA_PIXEL), AOI statistics, rendered previews.
-4. The inspector and time-series chart show every observation — unusable ones with their reason.
-5. Change detection compares each observation with the most recent earlier usable one of the same collection; the anomaly score compares with the field's own history.
+3. The worker searches Sentinel-2 L2A (Earth Search) and Landsat C2 L2 (Planetary Computer), links matching scenes, and analyzes each: NDVI/NDWI per pixel from surface reflectance at 10 m, NDMI (canopy moisture) on its own 20 m (Landsat 30 m) grid, cloud/shadow masking (SCL / QA_PIXEL), AOI statistics, rendered previews.
+4. The inspector and time-series chart (NDVI or NDMI, with daily precipitation) show every observation — unusable ones with their reason.
+5. Within-field **low-vigour zones** are delineated on each usable NDVI image (relative to the field's own median that day) and checked for persistence in the previous usable image; change detection compares each observation with the most recent earlier usable one of the same collection (the ΔNDVI map is viewable on the map); the anomaly score compares with the field's own history.
 6. Alert rules (NDVI drop vs. baseline, dry spell, heat, NWS warnings, stale data, …) evaluate as results arrive.
 
 ### B — Municipal monitoring
@@ -87,7 +87,7 @@ Job failure policy (`src/server/jobs/queue.ts`): errors are retried with exponen
 
 | Class | Example |
 | --- | --- |
-| `deterministic_calculation` | NDVI, NDWI, anomaly z-score |
+| `deterministic_calculation` | NDVI, NDWI, NDMI, anomaly z-score, within-field low-vigour zones |
 | `model_prediction` | Sentinel-1 water threshold classifier; WorldCover / IO LULC classes |
 | `candidate_change` | NDVI change and water change candidates (unverified until reviewed) |
 | `rule_evaluation` | Alerts |
@@ -95,6 +95,21 @@ Job failure policy (`src/server/jobs/queue.ts`): errors are retried with exponen
 Raster processing (`src/server/analytics`) reads Cloud-Optimized GeoTIFF windows over HTTP range requests (geotiff.js), projects the AOI into the asset CRS (proj4), snaps the analysis grid to the source pixel lattice (no resampling of native bands), rasterizes the AOI, masks with provider quality bands, computes indices with each band's published scale/offset, summarizes over valid pixels, labels connected components, vectorizes exactly along pixel edges, and renders PNG previews (nearest-neighbour; masked pixels shown grey).
 
 Evidence grades for candidate changes are derived from listed criteria — magnitude vs. threshold, overlap of valid pixels, grid alignment, time between images, residual masking, size — and the reasons are stored with each detection. No numeric confidence is invented.
+
+**Low-vigour zones** (`ndvi-zones`, `src/server/analytics/zones.ts`): threshold = the area's median NDVI − max(1.5 × robust σ (1.4826·MAD), 0.10); 4-connected zones ≥ 2,000 m², ranked by area × deficit. Not computed when < 70 % of the area is usable, < 100 pixels, or median NDVI < 0.3 (bare soil, before emergence, after harvest). Grades use the deficit, size, the share of the zone's edge on masked pixels (residual cloud shadow) or on the area boundary (mixed pixels), the image's masking, and persistence (the same rule applied to the previous usable image's own NDVI within 45 days). Persistence cannot vouch for boundary zones. A zone is a measurement relative to the rest of the field, not a diagnosis.
+
+Enabling an analytic on an existing area re-queues its already-processed images (≤ 180 days, ≤ 200 items); processing computes only the method versions an image lacks.
+
+### Validated against real data
+
+`scripts/oryn/validate-field.ts` runs the real pipeline on a development database for the University of Nebraska–Lincoln Mead site US-Ne1 (irrigated maize centre pivot, AmeriFlux). Results on 2026-10-16 (Sentinel-2 L2A, 180 days, 97 images on two UTM tiles):
+
+* The NDVI/NDMI series follow the maize season: bare soil (NDVI ≈ 0.17, NDMI ≈ −0.2) → full canopy (≈ 0.88 / +0.44) → harvest (≈ 0.33 / −0.23); 8 cloudy images were rejected with their reasons.
+* An independent reproduction with GDAL/numpy (a separate code path: `gdal.Warp` onto ORYN's recorded grid, SCL mask, GDAL rasterization of the AOI) of 9 NDVI and NDMI rasters on both tiles, including one 13 %-cloud-masked image, matched ORYN exactly: identical AOI and validity masks, per-pixel difference ≤ 3 × 10⁻⁸ (float32 rounding), identical mean/median/p10/p90.
+* Zones appeared only in canopy months, never on bare-soil, harvested, or under-70 %-usable images. About half sat on the AOI boundary; this led to the boundary-edge measure and grade cap.
+* A field report generated from these results cites each finding's evidence rows (images, observations, zones).
+
+What this does **not** validate: agronomic meaning of individual zones (no ground truth was available), other sensors' scaling beyond the recorded Landsat metadata, and areas spanning tiles (each tile yields its own observation; there is no mosaicking).
 
 ## Timestamps
 
