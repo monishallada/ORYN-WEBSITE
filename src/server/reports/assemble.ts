@@ -542,14 +542,17 @@ export function buildReportContent(src: ReportSource): ReportContent {
     }
     const ndviValid = series.filter((s) => s.kind === "ndvi" && s.status === "valid" && typeof s.metrics.mean === "number");
     if (ndviValid.length >= 2) {
+      // Range, not first-vs-last: over a growing season the two ends can both be bare soil.
       const last = ndviValid[ndviValid.length - 1]!;
       const sameFamily = ndviValid.filter((s) => s.collection === last.collection);
-      const first = sameFamily[0]!;
-      if (first !== last) {
+      if (sameFamily.length >= 2) {
+        const low = sameFamily.reduce((a, b) => (b.metrics.mean! < a.metrics.mean! ? b : a));
+        const high = sameFamily.reduce((a, b) => (b.metrics.mean! > a.metrics.mean! ? b : a));
         addFinding(
           "observations",
-          `Mean NDVI (${last.collection}) went from ${round(first.metrics.mean!)} on ${first.observed_at.slice(0, 10)} to ${round(last.metrics.mean!)} on ${last.observed_at.slice(0, 10)} across ${sameFamily.length} usable observations.`,
-          [first.evidence_id, last.evidence_id],
+          `Mean NDVI (${last.collection}) across ${sameFamily.length} usable observations: lowest ${round(low.metrics.mean!)} on ${low.observed_at.slice(0, 10)}, ` +
+            `highest ${round(high.metrics.mean!)} on ${high.observed_at.slice(0, 10)}, latest ${round(last.metrics.mean!)} on ${last.observed_at.slice(0, 10)}.`,
+          [...new Set([low.evidence_id, high.evidence_id, last.evidence_id])],
         );
       }
     }
@@ -558,9 +561,19 @@ export function buildReportContent(src: ReportSource): ReportContent {
     if (lastWater) {
       addFinding("observations", `Latest open-water candidate area (${lastWater.kind}, ${lastWater.observed_at.slice(0, 10)}): ${formatArea(lastWater.metrics.water_area_m2!)}.`, [lastWater.evidence_id]);
     }
-    if (unusable.length) {
-      const reasons = [...new Set(unusable.map((u) => u.unusable_reason).filter(Boolean))].slice(0, 3).join("; ");
-      addFinding("observations", `${unusable.length} of ${series.length} acquisitions in the period were unusable (${reasons}).`, unusable.slice(0, 6).map((u) => u.evidence_id));
+    // Images, not observations: one image yields several analyses (NDVI, NDMI, …), and derived
+    // scores (e.g. an anomaly without enough history) say nothing about the image itself.
+    const IMAGE_KINDS = new Set(["ndvi", "ndmi", "ndwi", "s1_water", "landcover"]);
+    const images = new Map<string, typeof series>();
+    for (const e of series.filter((x) => IMAGE_KINDS.has(x.kind))) images.set(e.asset_id, [...(images.get(e.asset_id) ?? []), e]);
+    const unusableImages = [...images.values()].filter((es) => es.every((e) => e.status !== "valid")).map((es) => es[0]!);
+    if (unusableImages.length) {
+      const reasons = [...new Set(unusableImages.map((u) => u.unusable_reason).filter(Boolean))].slice(0, 3).join("; ");
+      addFinding(
+        "observations",
+        `${unusableImages.length} of ${images.size} images in the period were unusable for analysis (${reasons}).`,
+        unusableImages.slice(0, 6).map((u) => u.evidence_id),
+      );
     }
   } else if (src.aoi) {
     addFinding("data_currency", currency, aoi ? [aoi.evidence_id] : []);
@@ -593,14 +606,34 @@ export function buildReportContent(src: ReportSource): ReportContent {
         ? { status: "ok", text: `${items.length} detection(s) recorded for observations acquired in the period. Candidate changes are not confirmed unless verified.` }
         : { status: currencyStatus === "missing" ? "missing" : "ok", text: `No detections were recorded for observations acquired in the period${currencyStatus === "missing" ? " (no usable imagery was available to compare)" : ""}.` },
     };
-    if (items.length) {
-      const grades = ["strong", "moderate", "weak", "insufficient"].map((g) => [g, items.filter((i) => i.evidence_grade === g).length] as const).filter(([, n]) => n > 0);
-      const confirmed = items.filter((i) => i.verification_status === "confirmed").length;
-      const dismissed = items.filter((i) => i.verification_status === "dismissed").length;
+    const gradeText = (xs: DetectionEntry[]) =>
+      ["strong", "moderate", "weak", "insufficient"]
+        .map((g) => [g, xs.filter((i) => i.evidence_grade === g).length] as const)
+        .filter(([, n]) => n > 0)
+        .map(([g, n]) => `${n} ${g}`)
+        .join(", ");
+    const reviewText = (xs: DetectionEntry[]) =>
+      `${xs.filter((i) => i.verification_status === "confirmed").length} confirmed and ${xs.filter((i) => i.verification_status === "dismissed").length} dismissed by reviewers, the rest unverified`;
+    // Within-field zones are single-date findings, not changes: reported separately.
+    const zones = items.filter((i) => i.type === "low_vigor_zone");
+    const changes = items.filter((i) => i.type !== "low_vigor_zone");
+    if (changes.length) {
       addFinding(
         "detections",
-        `${items.length} candidate change(s) recorded (${grades.map(([g, n]) => `${n} ${g}`).join(", ")} evidence); ${confirmed} confirmed and ${dismissed} dismissed by reviewers, the rest unverified.`,
-        items.slice(0, 8).map((i) => i.evidence_id),
+        `${changes.length} candidate change(s) recorded (${gradeText(changes)} evidence); ${reviewText(changes)}.`,
+        changes.slice(0, 8).map((i) => i.evidence_id),
+      );
+    }
+    if (zones.length) {
+      const metricsOf = (id: string) => src.detections.find((d) => d.id === id)?.metrics ?? {};
+      const persistent = zones.filter((z) => (metricsOf(z.detection_id).persistence as { state?: string } | undefined)?.state === "persistent").length;
+      const top = [...zones].sort((a, b) => Number(metricsOf(b.detection_id).score ?? 0) - Number(metricsOf(a.detection_id).score ?? 0)).slice(0, 5);
+      addFinding(
+        "detections",
+        `${zones.length} within-field low-vigour zone(s) recorded (${gradeText(zones)} evidence), ${persistent} of them also low in the previous usable image; ${reviewText(zones)}. ` +
+          `Largest by area × NDVI deficit: ${top.map((z) => `"${z.title}" (${z.comparison_observed_at ? z.comparison_observed_at.slice(0, 10) : "date unknown"})`).join("; ")}. ` +
+          "A zone marks NDVI that is low relative to the rest of the area on that date; it calls for a field check and is not a diagnosis.",
+        top.map((z) => z.evidence_id),
       );
     }
   }

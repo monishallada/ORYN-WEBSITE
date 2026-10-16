@@ -114,13 +114,36 @@ describe("report content", () => {
     expect(c.evidence[c.limitations.models[0]!.limitations[0]!.id]!.kind).toBe("limitation");
   });
 
+  it("counts images, not analyses, and reports the NDVI range rather than first-vs-last", () => {
+    const cloudy = { unusable_reason: "95% of AOI pixels masked as cloud", flags: [], gsd_m: 10, coverage_fraction: 1, masked_fraction: 0.95, scene_cloud_cover: 90 };
+    const c = buildReportContent(
+      source({
+        observations: [
+          obs("bare", 150, 0.17),
+          // One image, three analyses: NDVI and NDMI usable, the anomaly score lacks history.
+          obs("peak", 80, 0.91, { asset_id: "asset-peak" }),
+          obs("peak-ndmi", 80, 0.4, { kind: "ndmi", model_id: "ndmi", asset_id: "asset-peak" }),
+          obs("peak-anomaly", 80, 0.91, { kind: "ndvi_anomaly", model_id: "ndvi-anomaly", status: "unusable", asset_id: "asset-peak", quality: { ...cloudy, unusable_reason: "Insufficient baseline: 1 earlier usable acquisition date (at least 3 needed)." } }),
+          // A cloudy image: both analyses unusable.
+          obs("cloud", 60, 0.2, { status: "unusable", asset_id: "asset-cloud", quality: cloudy }),
+          obs("cloud-ndmi", 60, 0.1, { kind: "ndmi", model_id: "ndmi", status: "unusable", asset_id: "asset-cloud", quality: cloudy }),
+          obs("harvest", 30, 0.3),
+        ],
+      }),
+    );
+    const texts = c.findings.map((f) => f.text);
+    expect(texts).toContainEqual(expect.stringMatching(/^1 of 4 images in the period were unusable for analysis \(95% of AOI pixels masked as cloud\)\.$/));
+    expect(texts.join(" ")).not.toMatch(/Insufficient baseline/);
+    expect(texts).toContainEqual(expect.stringMatching(/across 3 usable observations: lowest 0\.17 on .*, highest 0\.91 on .*, latest 0\.3 on /));
+  });
+
   it("template summary carries the stale-data statement and citations", () => {
     const c = buildReportContent(source());
     const t = templateSummary(c);
     expect(t).toContain("Latest usable imagery is 23 days old");
     expect(t).toMatch(/\[E\d+\]\./);
     expect(t.match(/Latest usable imagery is 23 days old/g)).toHaveLength(1);
-    expect(t).toContain("1 of 3 acquisitions in the period were unusable (92% of AOI pixels masked as cloud)");
+    expect(t).toContain("1 of 3 images in the period were unusable for analysis (92% of AOI pixels masked as cloud)");
     expect(t).toContain("No model-estimated weather records are stored");
   });
 
