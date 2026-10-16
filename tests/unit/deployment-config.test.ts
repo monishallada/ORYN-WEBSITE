@@ -79,6 +79,15 @@ describe("container platform fallbacks", () => {
     expect(env.workerHealthPort()).toBe(0);
   });
 
+  it("accepts ORYN_CLIENT_IP_HEADER only as a header name, case-insensitively", () => {
+    vi.stubEnv("ORYN_CLIENT_IP_HEADER", "X-Real-IP");
+    expect(env.authClientIpHeader()).toBe("x-real-ip");
+    vi.stubEnv("ORYN_CLIENT_IP_HEADER", "x-real-ip, x-forwarded-for");
+    expect(() => env.authClientIpHeader()).toThrow(/must be an HTTP header name/);
+    vi.stubEnv("ORYN_CLIENT_IP_HEADER", "");
+    expect(env.authClientIpHeader()).toBeUndefined();
+  });
+
   it("reports the deployed commit as the version when none is given", () => {
     vi.stubEnv("ORYN_APP_VERSION", "");
     vi.stubEnv("VERCEL_GIT_COMMIT_SHA", "");
