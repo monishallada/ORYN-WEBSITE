@@ -182,7 +182,14 @@ export function buildAuthOptions(overrides: Partial<BetterAuthOptions> = {}): Be
       },
     },
     advanced: {
-      ...(env.authTrustedProxies().length ? { ipAddress: { trustedProxies: env.authTrustedProxies() } } : {}),
+      ...(env.authTrustedProxies().length || env.authClientIpHeader()
+        ? {
+            ipAddress: {
+              ...(env.authTrustedProxies().length ? { trustedProxies: env.authTrustedProxies() } : {}),
+              ...(env.authClientIpHeader() ? { ipAddressHeaders: [env.authClientIpHeader()!] } : {}),
+            },
+          }
+        : {}),
       cookiePrefix: "oryn",
       useSecureCookies: isProduction(),
       defaultCookieAttributes: { sameSite: "lax", httpOnly: true },

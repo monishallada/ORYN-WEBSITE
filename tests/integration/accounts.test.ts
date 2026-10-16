@@ -2,7 +2,8 @@
  * Administrator-provisioned accounts, exercised through Better Auth's real
  * HTTP handler (behind ORYN's endpoint allowlist) and the account service.
  */
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { betterAuth } from "better-auth";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   accountExists,
   createPartnerAccount,
@@ -18,7 +19,7 @@ import {
 import { changeOwnPassword } from "@/server/accounts/self-service";
 import { coreAuth } from "@/server/auth/core";
 import { handleAuthRequest } from "@/server/auth/http";
-import { closeAuthPool, trustedUserCreation } from "@/server/auth/options";
+import { buildAuthOptions, closeAuthPool, trustedUserCreation } from "@/server/auth/options";
 import { AccessError, listUserOrgs, resolveUserOrgAccess } from "@/server/authz/access";
 import { addMember, closeTestDb, createOrg, createUser, meta, ownerSql, resetDb } from "../helpers/db";
 
@@ -220,6 +221,34 @@ describe("administrator-provisioned accounts", () => {
     // Even the right password is refused from that address until the window passes; other clients are unaffected.
     expect((await signIn("jdoe", PASSWORD, "192.0.2.77")).status).toBe(429);
     expect((await signIn("jdoe", PASSWORD, "192.0.2.78")).status).toBe(200);
+  });
+
+  it("behind a multi-hop proxy (Railway), ORYN_CLIENT_IP_HEADER keeps sign-in limits per client", async () => {
+    await createPartnerAccount(CLI, { username: "jdoe", name: "Jane Doe" }, { password: PASSWORD });
+    // Railway's edge: X-Forwarded-For is a chain (client, then a Railway hop); X-Real-IP is the client.
+    const viaRailway = (auth: { handler: (r: Request) => Promise<Response> }, client: string, password = "not-the-password-1") =>
+      handleAuthRequest(auth, new Request(`${BASE}/api/auth/sign-in/username`, {
+        method: "POST",
+        headers: { origin: BASE, "content-type": "application/json", "x-forwarded-for": `${client}, 100.64.0.7`, "x-real-ip": client },
+        body: JSON.stringify({ username: "jdoe", password }),
+      }));
+    try {
+      // Without the setting the chain is not trusted: every client shares one bucket.
+      const shared = betterAuth(buildAuthOptions());
+      for (let i = 0; i < 5; i++) expect((await viaRailway(shared, "203.0.113.10")).status).toBe(401);
+      expect((await viaRailway(shared, "203.0.113.99", PASSWORD)).status).toBe(429);
+      await ownerSql()`delete from auth_rate_limit`;
+
+      vi.stubEnv("ORYN_CLIENT_IP_HEADER", "X-Real-IP");
+      const perClient = betterAuth(buildAuthOptions());
+      for (let i = 0; i < 5; i++) expect((await viaRailway(perClient, "203.0.113.10")).status).toBe(401);
+      expect((await viaRailway(perClient, "203.0.113.10")).status).toBe(429);
+      expect((await viaRailway(perClient, "203.0.113.11", PASSWORD)).status).toBe(200);
+      const keys = await ownerSql()<{ key: string }[]>`select key from auth_rate_limit order by key`;
+      expect(keys.map((k) => k.key.split("|")[0])).toEqual(["203.0.113.10", "203.0.113.11"]);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("provisioning is idempotent and never resets an existing password", async () => {

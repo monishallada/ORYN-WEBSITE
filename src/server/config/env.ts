@@ -76,6 +76,19 @@ export const env = {
    * would put every client in one shared bucket.
    */
   authTrustedProxies: () => (read("ORYN_TRUSTED_PROXIES") ?? "").split(",").map((s) => s.trim()).filter(Boolean),
+  /**
+   * A single-value header that the platform's edge proxy sets to the client
+   * address and overwrites on every request (Railway: x-real-ip). Used instead
+   * of X-Forwarded-For for sign-in rate limits and audit IPs; Railway's
+   * X-Forwarded-For is a multi-hop chain, which otherwise puts every client
+   * in one shared rate-limit bucket. Only set it for a header the proxy
+   * controls — a client-settable header would let callers pick their bucket.
+   */
+  authClientIpHeader: () => {
+    const h = read("ORYN_CLIENT_IP_HEADER")?.toLowerCase();
+    if (h && !/^[a-z0-9-]{1,64}$/.test(h)) throw new ConfigError("ORYN_CLIENT_IP_HEADER", "ORYN_CLIENT_IP_HEADER must be an HTTP header name.");
+    return h;
+  },
   /** Session lifetime and sliding refresh, in seconds. */
   sessionMaxAgeSeconds: () => int("ORYN_SESSION_MAX_AGE_SECONDS", 60 * 60 * 12, 300, 60 * 60 * 24 * 30),
 
