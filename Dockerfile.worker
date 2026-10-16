@@ -1,0 +1,50 @@
+# ORYN worker — persistent job worker + scheduler (`node dist/worker.mjs`),
+# also the image for the migration job and operator CLIs.
+#
+#   docker build -f Dockerfile.worker -t oryn-worker .
+#   Railway: service variable RAILWAY_DOCKERFILE_PATH=Dockerfile.worker
+#
+#   Worker (default command)   node dist/worker.mjs     health: GET :$PORT/healthz, /readyz
+#   Migration job (one-off)    node dist/migrate.mjs    (needs DATABASE_OWNER_URL only)
+#   Operator CLIs              node dist/verify.mjs | accounts.mjs | admin.mjs
+#
+# The final stage is the worker image, so no build-target selection is needed.
+# The worker does not need the Next.js build; only the bundled scripts.
+
+ARG NODE_IMAGE=node:22-bookworm-slim
+
+# ── Dependencies (all, for building) ───────────────────────────
+FROM ${NODE_IMAGE} AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
+
+# ── Build: bundle the worker and CLIs into dist/*.mjs ──────────
+FROM deps AS build
+COPY . .
+RUN npm run build:scripts
+
+# ── Production dependencies (externals the bundles load at runtime) ──
+FROM ${NODE_IMAGE} AS prod-deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
+
+# ── Worker (final stage) ───────────────────────────────────────
+FROM ${NODE_IMAGE} AS worker
+WORKDIR /app
+# Empty → the version falls back to RAILWAY_GIT_COMMIT_SHA at runtime, then "dev".
+ARG ORYN_APP_VERSION=
+# The health server listens on ORYN_WORKER_HEALTH_PORT if set, else on PORT
+# (Railway health checks use PORT). 8081 when neither is overridden.
+ENV NODE_ENV=production ORYN_SERVICE=worker PORT=8081 ORYN_APP_VERSION=${ORYN_APP_VERSION}
+COPY --from=prod-deps --chown=node:node /app/node_modules ./node_modules
+COPY --from=build --chown=node:node /app/package.json ./package.json
+COPY --from=build --chown=node:node /app/dist ./dist
+COPY --from=build --chown=node:node /app/db/migrations ./db/migrations
+USER node
+EXPOSE 8081
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.ORYN_WORKER_HEALTH_PORT||process.env.PORT||8081)+'/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+# Exec form: node is PID 1 and receives SIGTERM directly (graceful drain).
+CMD ["node", "dist/worker.mjs"]

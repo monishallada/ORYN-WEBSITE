@@ -144,7 +144,7 @@ Documentation:
 
 **Read [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) first** — services, images, the production environment checklist, database roles, the migration and rollback plan, health checks, and which integrations must be verified before they are enabled. In short:
 
-- **Images:** one `Dockerfile`, two targets — `web` (Next.js standalone server) and `worker` (bundled worker plus the migration job and operator CLIs). Both run as an unprivileged user and declare health checks.
+- **Images:** one Dockerfile per service — `Dockerfile.web` (Next.js standalone server) and `Dockerfile.worker` (bundled worker plus the migration job and operator CLIs). Both run as an unprivileged user and declare health checks. The root `Dockerfile` deliberately fails with a pointer to them. Railway settings are in [`docs/DEPLOYMENT.md → Railway`](docs/DEPLOYMENT.md#railway).
 - **Database:** PostgreSQL 15+ with PostGIS; roles from `db/production/roles.sql` (the services connect as `oryn_app`, which cannot bypass row-level security). Run the migration job before each release.
 - **Worker:** a long-running service (`node dist/worker.mjs`), not serverless.
 - **Object storage:** a private S3-compatible bucket (`ORYN_STORAGE_DRIVER=s3`); production refuses local storage unless chosen deliberately.

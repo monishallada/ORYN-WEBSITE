@@ -95,8 +95,13 @@ export const env = {
   }),
 
   cronSecret: () => read("ORYN_CRON_SECRET"),
-  /** Port for the worker's /healthz and /readyz endpoints (0 = disabled). */
-  workerHealthPort: () => int("ORYN_WORKER_HEALTH_PORT", 0, 0, 65535),
+  /**
+   * Port for the worker's /healthz and /readyz (0 = disabled). In production
+   * it falls back to PORT, which container platforms (Railway) set and probe;
+   * outside production it is off unless ORYN_WORKER_HEALTH_PORT is set, so a
+   * PORT meant for the dev web server is never taken by the worker.
+   */
+  workerHealthPort: () => int("ORYN_WORKER_HEALTH_PORT", isProduction() ? int("PORT", 0, 0, 65535) : 0, 0, 65535),
   workerConcurrency: () => int("ORYN_WORKER_CONCURRENCY", 2, 1, 32),
   workerPollMs: () => int("ORYN_WORKER_POLL_MS", 2000, 200, 60000),
   schedulerIntervalMs: () => int("ORYN_SCHEDULER_INTERVAL_MS", 60_000, 5_000, 3_600_000),
@@ -150,7 +155,8 @@ export const env = {
   // ── Development ────────────────────────────────────────────
   allowSyntheticSeed: () => bool("ORYN_ALLOW_SYNTHETIC_SEED", false),
   logLevel: () => (read("LOG_LEVEL") ?? (isProduction() ? "info" : "debug")) as "debug" | "info" | "warn" | "error",
-  appVersion: () => read("ORYN_APP_VERSION") ?? read("VERCEL_GIT_COMMIT_SHA")?.slice(0, 12) ?? "dev",
+  appVersion: () =>
+    read("ORYN_APP_VERSION") ?? read("RAILWAY_GIT_COMMIT_SHA")?.slice(0, 12) ?? read("VERCEL_GIT_COMMIT_SHA")?.slice(0, 12) ?? "dev",
 };
 
 export const uuidSchema = z.uuid();
