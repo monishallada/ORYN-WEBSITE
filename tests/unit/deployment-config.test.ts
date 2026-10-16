@@ -48,6 +48,16 @@ describe("service Dockerfiles", () => {
     const ignore = read(".dockerignore").split("\n").map((l) => l.trim());
     for (const p of [".env*", "var", "dist", "node_modules", ".git"]) expect(ignore).toContain(p);
   });
+
+  it("the Railway database image is Railway's pinned PostgreSQL 18 image plus only PostGIS", () => {
+    const src = read("deploy/railway/postgres/Dockerfile");
+    const from = [...src.matchAll(/^FROM\s+(\S+)/gm)].map((m) => m[1]);
+    // One stage, same major version as the existing volume, pinned by digest.
+    expect(from).toEqual([expect.stringMatching(/^ghcr\.io\/railwayapp-templates\/postgres-ssl:18(\.\d+)?@sha256:[0-9a-f]{64}$/)]);
+    expect(src).toMatch(/apt-get install -y --no-install-recommends postgresql-18-postgis-3=\S+/);
+    // Keeps the base image's entrypoint (SSL certificates, volume checks) and command.
+    expect(src).not.toMatch(/^(ENTRYPOINT|CMD|USER|ENV|VOLUME)\b/m);
+  });
 });
 
 describe("container platform fallbacks", () => {
