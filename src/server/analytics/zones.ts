@@ -15,8 +15,9 @@
  * differences carry no meaning and nothing is reported.
  *
  * Each zone records how much of its edge borders masked (cloud, shadow, no
- * data) pixels: residual cloud shadow at mask edges is the most common false
- * low-NDVI pattern. Persistence against an earlier image (zonePersistence)
+ * data) pixels — residual cloud shadow at mask edges is the most common false
+ * low-NDVI pattern — and how much of it is the area's own boundary, where
+ * 10–30 m pixels mix with neighbouring land. Persistence against an earlier image (zonePersistence)
  * applies the same rule to that image's own NDVI on the same pixels.
  *
  * Pure functions; the job (src/server/pipeline/zones.ts) loads grids and
@@ -57,6 +58,8 @@ export type ZoneMetrics = {
   score: number;
   /** Share of the zone's outer edge that borders masked (no-value) pixels inside the AOI. */
   edge_masked_fraction: number;
+  /** Share of the zone's outer edge that is the AOI boundary (pixels there mix with neighbouring land). */
+  boundary_edge_fraction: number;
   /** Zone area / valid area of the AOI. */
   share_of_valid_area: number;
 };
@@ -124,14 +127,26 @@ function lonLatBBox(g: MultiPolygonGeometry): BBox {
   return [w, s, e, nn];
 }
 
-/** Per label: share of 4-neighbour edge pixels (inside the AOI, outside the zone) that have no value. */
-function edgeMaskedFractions(labels: Int32Array, count: number, values: Float32Array, inside: Uint8Array | null, width: number, height: number): Float64Array {
-  const edges = new Float64Array(count + 1);
+/**
+ * Per label, over the zone's 4-neighbour edge (neighbours not in the zone):
+ *  masked   share of edge neighbours inside the AOI that have no value;
+ *  boundary share of all edge neighbours that are outside the AOI (or the grid).
+ */
+function edgeFractions(labels: Int32Array, count: number, values: Float32Array, inside: Uint8Array | null, width: number, height: number) {
+  const insideEdges = new Float64Array(count + 1);
   const masked = new Float64Array(count + 1);
+  const outside = new Float64Array(count + 1);
   const check = (l: number, j: number) => {
-    if (inside && !inside[j]) return;
+    if (j < 0) {
+      outside[l] = outside[l]! + 1;
+      return;
+    }
     if (labels[j] === l) return;
-    edges[l] = edges[l]! + 1;
+    if (inside && !inside[j]) {
+      outside[l] = outside[l]! + 1;
+      return;
+    }
+    insideEdges[l] = insideEdges[l]! + 1;
     if (!Number.isFinite(values[j]!)) masked[l] = masked[l]! + 1;
   };
   for (let r = 0; r < height; r++) {
@@ -139,15 +154,20 @@ function edgeMaskedFractions(labels: Int32Array, count: number, values: Float32A
       const i = r * width + c;
       const l = labels[i]!;
       if (!l) continue;
-      if (c > 0) check(l, i - 1);
-      if (c < width - 1) check(l, i + 1);
-      if (r > 0) check(l, i - width);
-      if (r < height - 1) check(l, i + width);
+      check(l, c > 0 ? i - 1 : -1);
+      check(l, c < width - 1 ? i + 1 : -1);
+      check(l, r > 0 ? i - width : -1);
+      check(l, r < height - 1 ? i + width : -1);
     }
   }
-  const out = new Float64Array(count + 1);
-  for (let l = 1; l <= count; l++) out[l] = edges[l]! > 0 ? masked[l]! / edges[l]! : 0;
-  return out;
+  const maskedShare = new Float64Array(count + 1);
+  const boundaryShare = new Float64Array(count + 1);
+  for (let l = 1; l <= count; l++) {
+    maskedShare[l] = insideEdges[l]! > 0 ? masked[l]! / insideEdges[l]! : 0;
+    const all = insideEdges[l]! + outside[l]!;
+    boundaryShare[l] = all > 0 ? outside[l]! / all : 0;
+  }
+  return { maskedShare, boundaryShare };
 }
 
 export function detectLowVigorZones(input: { values: Float32Array; inside: Uint8Array | null; grid: Grid; params?: Partial<ZoneParams> }): ZonesResult {
@@ -190,7 +210,7 @@ export function detectLowVigorZones(input: { values: Float32Array; inside: Uint8
   }
   const labels = labelComponents(low, grid.width, grid.height);
   const stats = componentStats(labels, grid, values);
-  const edge = edgeMaskedFractions(labels.labels, labels.count, values, inside, grid.width, grid.height);
+  const edge = edgeFractions(labels.labels, labels.count, values, inside, grid.width, grid.height);
   const rowArea = rowAreasM2(grid);
   let validAreaM2 = 0;
   for (let r = 0; r < grid.height; r++) {
@@ -227,7 +247,8 @@ export function detectLowVigorZones(input: { values: Float32Array; inside: Uint8
         relative_deficit: field.median > 0 ? deficit / field.median : 0,
         threshold: field.threshold,
         score,
-        edge_masked_fraction: edge[s.label]!,
+        edge_masked_fraction: edge.maskedShare[s.label]!,
+        boundary_edge_fraction: edge.boundaryShare[s.label]!,
         share_of_valid_area: validAreaM2 > 0 ? s.areaM2 / validAreaM2 : 0,
       },
     };
@@ -280,7 +301,11 @@ export type Grade = "strong" | "moderate" | "weak";
 const ORDER: Grade[] = ["weak", "moderate", "strong"];
 const lower = (a: Grade, b: Grade): Grade => (ORDER.indexOf(a) <= ORDER.indexOf(b) ? a : b);
 
-/** Evidence grade for one zone, with the reasons that produced it. Pure; unit-tested. */
+/**
+ * Evidence grade for one zone, with the reasons that produced it. Pure; unit-tested.
+ * Persistence can lift concerns specific to one image (size noise, masked edges,
+ * that image's masking) but not boundary mixing, which is capped last.
+ */
 export function gradeZone(m: ZoneMetrics, ctx: { maskedFraction: number; persistence: Persistence }): { grade: Grade; reasons: string[] } {
   const reasons: string[] = [];
   let grade: Grade = m.deficit >= 0.2 ? "strong" : m.deficit >= 0.12 ? "moderate" : "weak";
@@ -306,6 +331,14 @@ export function gradeZone(m: ZoneMetrics, ctx: { maskedFraction: number; persist
     reasons.push(`Not low in the previous usable image (${ps.date}); it may be short-lived or an artefact of this image.`);
   } else {
     reasons.push(ps.reason);
+  }
+  // Applied after persistence: a road or margin next to the field is in every image too, so
+  // persistence cannot vouch for a zone along the boundary.
+  if (m.boundary_edge_fraction > 0.3) {
+    grade = lower(grade, "moderate");
+    reasons.push(
+      `${Math.round(m.boundary_edge_fraction * 100)}% of the zone's edge is the area's boundary; pixels there mix with neighbouring land (roads, margins, other crops), although edge effects such as headland compaction can be real.`,
+    );
   }
   return { grade, reasons };
 }

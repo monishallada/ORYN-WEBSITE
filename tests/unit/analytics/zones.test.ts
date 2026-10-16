@@ -74,6 +74,18 @@ describe("ndvi-zones", () => {
     expect(detectLowVigorZones({ values: cloudy, inside: null, grid })).toMatchObject({ status: "not_applicable", reason: expect.stringMatching(/Only 60% of the area was usable/) });
   });
 
+  it("measures how much of a zone's edge is the area boundary", () => {
+    // AOI = all but the outer ring of pixels; a 6×6 low patch in the AOI's north-west corner.
+    const inside = new Uint8Array(W * H);
+    for (let r = 1; r < H - 1; r++) for (let c = 1; c < W - 1; c++) inside[r * W + c] = 1;
+    const v = field(0.7, [{ r0: 1, c0: 1, size: 6, value: 0.4 }]);
+    const r = detectLowVigorZones({ values: v, inside, grid });
+    if (r.status !== "valid") throw new Error(r.reason);
+    // 24 edge neighbours, 12 on the north and west sides are outside the AOI.
+    expect(r.zones[0]!.metrics.boundary_edge_fraction).toBeCloseTo(0.5, 10);
+    expect(r.zones[0]!.metrics.edge_masked_fraction).toBe(0);
+  });
+
   it("flags zones bordering masked pixels (possible residual cloud shadow)", () => {
     const v = field(0.7, [{ r0: 20, c0: 20, size: 8, value: 0.4 }]);
     // Masked pixels along the zone's east and north sides: 16 of its 32 edge neighbours.
@@ -104,13 +116,19 @@ describe("ndvi-zones", () => {
   });
 
   it("grades by deficit, size, masking, and persistence — never higher than the evidence allows", () => {
-    const base = { rank: 1, pixel_count: 64, area_m2: 6_400, mean_ndvi: 0.45, min_ndvi: 0.3, field_median: 0.7, deficit: 0.25, relative_deficit: 0.36, threshold: 0.6, score: 0.16, edge_masked_fraction: 0, share_of_valid_area: 0.02 };
+    const base = { rank: 1, pixel_count: 64, area_m2: 6_400, mean_ndvi: 0.45, min_ndvi: 0.3, field_median: 0.7, deficit: 0.25, relative_deficit: 0.36, threshold: 0.6, score: 0.16, edge_masked_fraction: 0, boundary_edge_fraction: 0, share_of_valid_area: 0.02 };
     const unknown = { state: "unknown" as const, reason: "No earlier usable image within 45 days to check persistence." };
     expect(gradeZone(base, { maskedFraction: 0, persistence: unknown }).grade).toBe("strong");
     expect(gradeZone({ ...base, deficit: 0.14 }, { maskedFraction: 0, persistence: unknown }).grade).toBe("moderate");
     expect(gradeZone({ ...base, deficit: 0.11 }, { maskedFraction: 0, persistence: unknown }).grade).toBe("weak");
     expect(gradeZone({ ...base, pixel_count: 20 }, { maskedFraction: 0, persistence: unknown }).grade).toBe("weak");
     expect(gradeZone(base, { maskedFraction: 0.3, persistence: unknown }).grade).toBe("moderate");
+    const atEdge = gradeZone({ ...base, boundary_edge_fraction: 0.5 }, { maskedFraction: 0, persistence: unknown });
+    expect(atEdge.grade).toBe("moderate");
+    expect(atEdge.reasons.join(" ")).toMatch(/50% of the zone's edge is the area's boundary/);
+    // Persistence cannot vouch for a boundary zone: the neighbouring road is in every image too.
+    const persistentAtEdge = gradeZone({ ...base, boundary_edge_fraction: 0.5 }, { maskedFraction: 0, persistence: { state: "persistent", date: "2026-07-01", lowShare: 1, coveredShare: 1 } });
+    expect(persistentAtEdge.grade).toBe("moderate");
     const persistent = { state: "persistent" as const, date: "2026-07-01", lowShare: 0.9, coveredShare: 1 };
     expect(gradeZone({ ...base, deficit: 0.11 }, { maskedFraction: 0, persistence: persistent })).toMatchObject({ grade: "moderate", reasons: expect.arrayContaining([expect.stringMatching(/Also low in the previous usable image \(2026-07-01\)/)]) });
     const transient = { state: "not_persistent" as const, date: "2026-07-01", lowShare: 0.1, coveredShare: 1 };

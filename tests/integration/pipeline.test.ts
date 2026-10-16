@@ -67,9 +67,10 @@ function asset(id: string, acquired: Date, cloud = 10): NormalizedAsset {
 }
 
 /** A fake optical result: NDVI `value` everywhere inside the AOI; `unusable` returns no metrics. */
-function opticalResult(value: number, opts: { unusable?: boolean; patch?: { value: number; size: number } } = {}) {
+function opticalResult(value: number, opts: { unusable?: boolean; patch?: { value: number; size: number; at?: number } } = {}) {
   const values = new Float32Array(W * H).fill(value);
-  if (opts.patch) for (let r = 0; r < opts.patch.size; r++) for (let c = 0; c < opts.patch.size; c++) values[r * W + c] = opts.patch.value;
+  const at = opts.patch?.at ?? 0;
+  if (opts.patch) for (let r = at; r < at + opts.patch.size; r++) for (let c = at; c < at + opts.patch.size; c++) values[r * W + c] = opts.patch.value;
   const inside = new Uint8Array(W * H).fill(1);
   const quality = { coverage_fraction: 1, scene_cloud_cover: 10, masked_fraction: opts.unusable ? 0.9 : 0, flags: opts.unusable ? ["below_min_valid_fraction"] : [], gsd_m: 10, ...(opts.unusable ? { unusable_reason: "Only 10% of the area was cloud-free in this image (minimum 20%)." } : {}) };
   const out = {
@@ -283,14 +284,14 @@ describe("agriculture: within-field zones, NDMI, and analytics backfill", () => 
   beforeEach(resetDb);
   afterAll(closeTestDb);
 
-  /** NDVI 0.7 with a 6 × 6 px (3,600 m²) patch at 0.4 in the corner, or NDMI when the call asks for it. */
+  /** NDVI 0.7 with a 6 × 6 px (3,600 m²) patch at 0.4 inside the field (not on its edge), or NDMI when the call asks for it. */
   function zonedOptical(p: unknown) {
     const want = (p as { want: { ndmi?: boolean } }).want;
     if (want.ndmi) {
       const r = opticalResult(0.25);
       return Promise.resolve({ ...r, ndvi: undefined, ndmi: { ...r.ndvi, legend: { kind: "ndmi", stops: [] } } });
     }
-    const r = opticalResult(0.7, { patch: { value: 0.4, size: 6 } });
+    const r = opticalResult(0.7, { patch: { value: 0.4, size: 6, at: 7 } });
     // Like the real reader: a true-colour image comes with the NDVI read when asked for.
     return Promise.resolve((want as { trueColor?: boolean }).trueColor ? { ...r, trueColor: { png: Buffer.from([0x89, 0x50]), legend: { kind: "true_color" } } } : r);
   }
