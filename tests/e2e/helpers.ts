@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import type { Page } from "@playwright/test";
 import postgres from "postgres";
 
-export type Fixtures = { password: string; farm: string; city: string; farmAoi: string; cityAoi: string; trialAoi: string; detection: string };
+export type Fixtures = { password: string; farm: string; city: string; farmAoi: string; cityAoi: string; trialAoi: string; detection: string; zone: string };
 
 /**
  * Sign-in is limited to 5 attempts per minute per address and path; the suite

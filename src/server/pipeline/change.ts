@@ -21,6 +21,7 @@ import { enqueueTx, PermanentJobError } from "@/server/jobs/queue";
 import { JOB } from "@/server/jobs/types";
 import type { JobContext } from "@/server/jobs/worker";
 import { computeNdviAnomaly } from "@/server/pipeline/anomaly";
+import { computeLowVigorZones } from "@/server/pipeline/zones";
 import { orgKey, storage } from "@/server/storage";
 
 export const NDVI_THRESHOLD = 0.2;
@@ -125,7 +126,9 @@ function titleFor(kind: "ndvi" | "water", c: ChangeCandidate, orgKind: string): 
 }
 
 export async function changeDetectionHandler(ctx: JobContext): Promise<unknown> {
-  const p = ctx.job.payload as { aoiId: string; observationId: string; reprocess?: boolean; historical?: boolean };
+  // followUps: when set (analytics enabled later on an existing area), only these analyses run.
+  const p = ctx.job.payload as { aoiId: string; observationId: string; reprocess?: boolean; historical?: boolean; followUps?: string[] };
+  const wants = (id: string) => !p.followUps || p.followUps.includes(id);
   const orgId = ctx.job.org_id;
   if (!orgId) throw new PermanentJobError("Change detection requires an organization.");
 
@@ -148,15 +151,21 @@ export async function changeDetectionHandler(ctx: JobContext): Promise<unknown> 
     const [aoi] = await tx<{ enabled_analytics: string[] }[]>`select enabled_analytics from aois where id = ${p.aoiId} and org_id = ${orgId}`;
     const enabled = new Set(aoi?.enabled_analytics ?? []);
     // The anomaly score also compares against history, so it runs here, after the batch's images are processed.
-    const anomaly = after.kind === "ndvi" && after.status === "valid" && enabled.has("ndvi-anomaly")
+    const anomaly = after.kind === "ndvi" && after.status === "valid" && enabled.has("ndvi-anomaly") && wants("ndvi-anomaly")
       ? await computeNdviAnomaly(tx, { orgId, aoiId: p.aoiId, observationId: after.id, jobId: ctx.job.id })
       : null;
     return { after, candidates, orgKind: org?.kind ?? "enterprise", enabled, anomaly };
   });
   if (!loaded) throw new PermanentJobError("The observation no longer exists.");
   const { after, orgKind } = loaded;
+  // Within-field low-vigour zones need only this image (plus the previous one for persistence).
+  const zones =
+    after.kind === "ndvi" && loaded.enabled.has("ndvi-zones") && wants("ndvi-zones")
+      ? await computeLowVigorZones({ orgId, aoiId: p.aoiId, observationId: after.id, jobId: ctx.job.id, attempt: ctx.job.attempts, reprocess: p.reprocess, historical: p.historical })
+      : null;
   const kind: "ndvi" | "water" = after.kind === "ndvi" ? "ndvi" : "water";
-  if (!loaded.enabled.has(kind === "ndvi" ? "ndvi-change" : "water-change")) return { anomaly: loaded.anomaly?.status ?? null, change: "not_enabled" };
+  const changeId = kind === "ndvi" ? "ndvi-change" : "water-change";
+  if (!loaded.enabled.has(changeId) || !wants(changeId)) return { anomaly: loaded.anomaly?.status ?? null, zones, change: "not_enabled" };
   const model = ANALYTICS[kind === "ndvi" ? "ndvi-change" : "water-change"];
   // Radar backscatter depends on viewing geometry, so Sentinel-1 is compared
   // only within one relative orbit (grid_code). Optical products prefer the

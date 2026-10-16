@@ -11,6 +11,16 @@ import { addMember, createUser, meta, ownerSql } from "../helpers/db";
 
 const DAY = 86_400_000;
 export const daysAgo = (n: number) => new Date(Date.now() - n * DAY);
+/**
+ * `n` days before the DATABASE clock. Use it when the code under test
+ * measures an age against the database's now() and floors it to whole days:
+ * the test host and PostgreSQL (in a VM) keep separate clocks, so a Node-side
+ * daysAgo(30) can read as 29 days when the database clock lags by a few ms.
+ */
+export async function dbDaysAgo(n: number): Promise<Date> {
+  const [r] = await ownerSql()<{ t: Date }[]>`select now() - make_interval(secs => ${n * 86_400}) as t`;
+  return r!.t;
+}
 const json = (v: unknown) => ownerSql().json(JSON.parse(JSON.stringify(v)));
 
 export async function member(org: { id: string; slug: string }, role: OrgRole, aoiRestricted = false) {

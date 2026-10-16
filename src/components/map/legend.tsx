@@ -6,13 +6,28 @@ import type { RasterRef } from "@/server/analytics/types";
  * map surface). Every swatch is paired with a text label; color is never the
  * only cue.
  */
-export const DETECTION_COLORS: Record<string, { color: string; label: string }> = {
+export const DETECTION_COLORS: Record<string, { color: string; label: string; dashed?: boolean }> = {
   vegetation_decline: { color: "#d95926", label: "Vegetation decline (candidate)" },
   vegetation_gain: { color: "#199e70", label: "Vegetation gain (candidate)" },
   new_water_candidate: { color: "#3987e5", label: "New surface water (candidate)" },
   water_loss: { color: "#c98500", label: "Surface water loss (candidate)" },
+  // Not another hue: the categorical palette has no sixth colour that stays
+  // distinguishable from all five on a map (checked with the palette
+  // validator), and zones are a different kind of finding (one date, not a
+  // change). They are drawn as a dashed neutral outline instead.
+  low_vigor_zone: { color: "#f2f1ed", label: "Low-vigour zone (within-field, one date)", dashed: true },
   other: { color: "#9085e9", label: "Other" },
 };
+
+/** Legend / inspector swatch: filled square, or a dashed outline for dashed types. */
+export function DetectionSwatch({ type }: { type: string }) {
+  const e = DETECTION_COLORS[type] ?? DETECTION_COLORS.other!;
+  return e.dashed ? (
+    <span aria-hidden="true" className="size-2.5 rounded-[1px] border border-dashed" style={{ borderColor: e.color, background: "rgba(242, 241, 237, 0.14)" }} />
+  ) : (
+    <span aria-hidden="true" className="size-2.5 rounded-[1px]" style={{ background: e.color }} />
+  );
+}
 
 export function detectionColor(type: string): string {
   return (DETECTION_COLORS[type] ?? DETECTION_COLORS.other!).color;
@@ -24,7 +39,7 @@ export function DetectionLegend({ types }: { types?: string[] }) {
     <ul className="flex flex-col gap-1">
       {entries.map(([t, v]) => (
         <li key={t} className="flex items-center gap-2 text-[0.75rem] text-bone-50/75">
-          <span aria-hidden="true" className="size-2.5 rounded-[1px]" style={{ background: v.color }} />
+          <DetectionSwatch type={t} />
           {v.label}
         </li>
       ))}

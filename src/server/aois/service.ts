@@ -18,6 +18,7 @@ import { recordAudit } from "@/server/audit";
 import type { OrgAccess } from "@/server/authz/access";
 import { env } from "@/server/config/env";
 import { jsonb, type Tx } from "@/server/db/client";
+import { createHash } from "node:crypto";
 import { DomainError, notFoundError } from "@/server/errors";
 import { enqueueTx } from "@/server/jobs/queue";
 import { JOB } from "@/server/jobs/types";
@@ -279,6 +280,67 @@ async function assertParent(tx: Tx, access: OrgAccess, parentId: string | null |
 }
 
 /** Queue a historical imagery search and a context refresh for an AOI. */
+/** Follow-up analyses that read stored results of earlier images rather than imagery. */
+const FOLLOW_UP_ANALYTICS = new Set(["ndvi-zones", "ndvi-change", "ndvi-anomaly", "water-change"]);
+export const BACKFILL_DAYS = 180;
+export const BACKFILL_MAX_ITEMS = 200;
+
+/**
+ * Analytics enabled after images were already processed would otherwise only
+ * apply to new imagery: images already linked to the area are never queued
+ * again. Queue them (most recent first, at most BACKFILL_MAX_ITEMS within
+ * BACKFILL_DAYS): per-image processing computes only the method versions an
+ * image lacks, and follow-up analyses run only for what was just enabled.
+ */
+export async function queueAnalyticsBackfill(
+  tx: Tx,
+  p: { orgId: string; aoiId: string; enabled: string[]; added: string[]; createdBy: string | null },
+): Promise<{ processing: number; followUps: number }> {
+  const stamp = createHash("sha1").update([...p.enabled].sort().join(",")).digest("hex").slice(0, 12);
+  const assets = await tx<{ asset_id: string }[]>`
+    select l.asset_id from aoi_assets l join source_assets s on s.id = l.asset_id
+     where l.aoi_id = ${p.aoiId} and l.org_id = ${p.orgId} and l.status in ('processed', 'unusable')
+       and s.acquired_at > now() - make_interval(days => ${BACKFILL_DAYS})
+     order by s.acquired_at desc limit ${BACKFILL_MAX_ITEMS}`;
+  for (const a of assets) {
+    await enqueueTx(tx, {
+      orgId: p.orgId,
+      type: JOB.aoiProcessAsset,
+      payload: { aoiId: p.aoiId, assetId: a.asset_id, reason: "analytics_enabled", reprocess: true },
+      priority: 65,
+      timeoutSeconds: 900,
+      idempotencyKey: `process:${p.aoiId}:${a.asset_id}:analytics:${stamp}`,
+      createdBy: p.createdBy,
+    });
+  }
+  const followUps = p.added.filter((a) => FOLLOW_UP_ANALYTICS.has(a));
+  let followUpJobs = 0;
+  if (followUps.length) {
+    const kinds = [
+      ...(followUps.some((f) => f !== "water-change") ? ["ndvi"] : []),
+      ...(followUps.includes("water-change") ? ["ndwi", "s1_water"] : []),
+    ];
+    const observations = await tx<{ id: string }[]>`
+      select o.id from observations o
+       where o.aoi_id = ${p.aoiId} and o.org_id = ${p.orgId} and o.status = 'valid' and o.is_current and o.kind = any(${kinds}::text[])
+         and o.observed_at > now() - make_interval(days => ${BACKFILL_DAYS})
+       order by o.observed_at desc limit ${BACKFILL_MAX_ITEMS}`;
+    for (const o of observations) {
+      await enqueueTx(tx, {
+        orgId: p.orgId,
+        type: JOB.aoiChangeDetection,
+        payload: { aoiId: p.aoiId, observationId: o.id, reprocess: true, historical: true, followUps },
+        priority: 70,
+        timeoutSeconds: 600,
+        idempotencyKey: `change:${o.id}:followups:${stamp}`,
+        createdBy: p.createdBy,
+      });
+    }
+    followUpJobs = observations.length;
+  }
+  return { processing: assets.length, followUps: followUpJobs };
+}
+
 export async function queueAoiRefresh(tx: Tx, access: OrgAccess | { org: { id: string }; actorId: string | null }, aoiId: string, reason: string) {
   const orgId = access.org.id;
   const createdBy = "principal" in access ? (access.principal.type === "user" ? access.principal.userId : null) : access.actorId;
@@ -414,6 +476,16 @@ export async function updateAoi(access: OrgAccess, id: string, raw: AoiUpdateInp
     const sourcesAdded = input.dataSources?.some((s) => !before.dataSources.includes(s)) ?? false;
     if (after.monitoringEnabled && (geometryChanged || sourcesAdded || (input.monitoringEnabled && !before.monitoringEnabled))) {
       await queueAoiRefresh(tx, access, id, geometryChanged ? "geometry_changed" : "sources_changed");
+    }
+    const analyticsAdded = (input.enabledAnalytics ?? []).filter((a) => !before.enabledAnalytics.includes(a));
+    if (analyticsAdded.length && after.status === "active") {
+      await queueAnalyticsBackfill(tx, {
+        orgId: access.org.id,
+        aoiId: id,
+        enabled: after.enabledAnalytics,
+        added: analyticsAdded,
+        createdBy: access.principal.type === "user" ? access.principal.userId : null,
+      });
     }
     return after;
   });

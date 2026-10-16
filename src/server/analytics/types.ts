@@ -6,7 +6,7 @@
 
 export type Histogram = { min: number; max: number; counts: number[] };
 
-/** observations.kind = 'ndvi' */
+/** observations.kind = 'ndvi' or 'ndmi' (index statistics over the AOI's valid pixels) */
 export type NdviMetrics = {
   mean: number;
   median: number;
@@ -76,7 +76,7 @@ export type RasterRef = {
   /** Image corners in lon/lat for map display: top-left, top-right, bottom-right, bottom-left. */
   corners: [[number, number], [number, number], [number, number], [number, number]];
   /** Legend for the PNG. */
-  legend: { kind: "ndvi" | "ndwi" | "water_mask" | "landcover" | "true_color" | "delta_ndvi"; min?: number; max?: number; stops?: { value: number; color: string; label?: string }[] };
+  legend: { kind: "ndvi" | "ndwi" | "ndmi" | "water_mask" | "landcover" | "true_color" | "delta_ndvi"; min?: number; max?: number; stops?: { value: number; color: string; label?: string }[] };
   /** Optional true-colour preview PNG on the same grid (optical sources only). */
   true_color_key?: string;
   /** Uint8 AOI mask on the same grid (1 = pixel centre inside the AOI at processing time). */

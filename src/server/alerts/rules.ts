@@ -78,9 +78,9 @@ export const RULE_TYPES = {
     triggers: ["observation", "schedule"],
   },
   detection_created: {
-    label: "New candidate change detected",
+    label: "New candidate change or zone detected",
     description:
-      "Fires once per new detection (candidate change) that matches the configured types, minimum area, and minimum evidence grade. Dismissed detections never fire.",
+      "Fires once per new detection — a candidate change between images, or a within-field low-vigour zone — that matches the configured types (empty: every type), minimum area, and minimum evidence grade. Dismissed detections never fire.",
     params: z.strictObject({
       /** Detection types to match; empty matches every type. */
       types: z.array(z.string().min(1).max(64)).max(20).default([]),
@@ -89,7 +89,7 @@ export const RULE_TYPES = {
     }),
     orgKinds: ALL_KINDS,
     requires: ["detections"],
-    needs: "Detections recorded by the change-detection pipeline after the rule was created.",
+    needs: "Detections (change candidates or low-vigour zones) recorded after the rule was created.",
     triggers: ["detection", "schedule"],
   },
   precipitation_total_above: {

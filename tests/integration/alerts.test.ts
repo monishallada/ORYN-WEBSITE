@@ -13,7 +13,7 @@ import { deliverAlertNotifications } from "@/server/notifications/deliver";
 import { alertUrl, type EmailMessage } from "@/server/notifications/email";
 import { listNotifications, markRead } from "@/server/notifications/service";
 import { closeTestDb, createOrg, insertAoi, ownerSql, resetDb, SQUARE } from "../helpers/db";
-import { daysAgo, grantAoi, insertDetection, insertObservation, insertRule, insertWarning, member, rows } from "./alerts.fixtures";
+import { daysAgo, dbDaysAgo, grantAoi, insertDetection, insertObservation, insertRule, insertWarning, member, rows } from "./alerts.fixtures";
 
 const obsTrigger = { kind: "observation" as const };
 
@@ -149,7 +149,8 @@ describe("alert evaluation", () => {
   it("runs through the JOB.alertsEvaluate handler and rejects malformed payloads permanently", async () => {
     const { org, aoi } = await setup();
     await insertRule(org.id, "stale_observations", { max_age_days: 7 });
-    await insertObservation(org.id, aoi, { observedAt: daysAgo(30), mean: 0.5 });
+    // The title floors (database now − observed) to whole days: take both from the database clock.
+    await insertObservation(org.id, aoi, { observedAt: await dbDaysAgo(30), mean: 0.5 });
     await ownerSql()`update aois set created_at = now() - interval '60 days' where id = ${aoi}`;
     const registry = new Map(ALERT_HANDLERS.map((h) => [h.type, h]));
     const ok = await enqueue({ orgId: org.id, type: JOB.alertsEvaluate, payload: { aoiId: aoi, trigger: { kind: "schedule" } } });

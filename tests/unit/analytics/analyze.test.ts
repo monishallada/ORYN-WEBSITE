@@ -54,6 +54,30 @@ function s2Scene(opts: { red?: Field; nir?: Field; green?: Field; scl?: Field; w
 const NDVI_VEG = 0.25 / 0.35;
 
 describe("analyzeOptical (Sentinel-2)", () => {
+  it("computes NDMI from B8A/B11 on their native 20 m grid, masks cloud, and refuses to share the 10 m NDVI grid", async () => {
+    // NIR08 0.30, SWIR16 0.15 → NDMI = 0.15 / 0.45 = 1/3; SCL cloud (9) in the south half of the AOI.
+    const rasters: Record<string, RasterSource> = {
+      nir08: band(20, 75, 75, () => 4000),
+      swir16: band(20, 75, 75, () => 2500),
+      scl: band(20, 75, 75, (_x, y) => (y < 3_999_150 ? 9 : 4), Uint8Array),
+    };
+    const assets = s2Assets(["nir08", "swir16", "scl"]);
+    const base = { collection: "sentinel-2-l2a" as const, assets, aoi: aoiFromUtm(AOI_BOX), resolve: memResolve, sceneCloudCover: 10, deps: { open: memoryOpener(rasters) } };
+    const res = await analyzeOptical({ ...base, want: { ndvi: false, ndwi: false, trueColor: false, ndmi: true } });
+    expect(res.grid.transform[1]).toBe(20);
+    expect(res.insideCount).toBe(225); // 300 m × 300 m at 20 m
+    const ndmi = res.ndmi!;
+    expect(ndmi.status).toBe("valid");
+    expect(ndmi.metrics!.mean).toBeCloseTo(1 / 3, 6);
+    expect(ndmi.metrics!.valid_fraction).toBeCloseTo(0.5, 1);
+    expect(ndmi.quality.gsd_m).toBe(20);
+    expect(ndmi.legend.kind).toBe("ndmi");
+    expect(res.ndvi).toBeUndefined();
+    await expect(analyzeOptical({ ...base, assets: s2Assets(["red", "nir", "nir08", "swir16", "scl"]), want: { ndvi: true, ndwi: false, trueColor: false, ndmi: true } })).rejects.toMatchObject({
+      reason: "separate_grid_required",
+    });
+  });
+
   it("computes NDVI and NDWI on the native 10 m lattice for a clear scene", async () => {
     // West of x = 200 650 is water: NIR 0.01, Green 0.06 → NDWI 0.714, NDVI −0.667.
     const water = (x: number) => x < 200_650;

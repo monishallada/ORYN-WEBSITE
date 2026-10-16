@@ -59,6 +59,16 @@ export const DELTA_NDVI_STOPS: LegendStop[] = [
   { value: 0.5, color: "#006837", label: "≥ +0.5 (increase)" },
 ];
 
+/** NDMI: ColorBrewer BrBG (diverging, colour-blind safe) — dry/sparse canopy brown, high canopy water teal. */
+export const NDMI_STOPS: LegendStop[] = [
+  { value: -0.4, color: "#8c510a", label: "≤ −0.4 (low canopy water)" },
+  { value: -0.2, color: "#d8b365" },
+  { value: 0, color: "#f6e8c3", label: "0" },
+  { value: 0.2, color: "#c7eae5" },
+  { value: 0.4, color: "#5ab4ac" },
+  { value: 0.6, color: "#01665e", label: "≥ 0.6 (high canopy water)" },
+];
+
 export const NDWI_STOPS: LegendStop[] = [
   { value: -0.6, color: "#a6611a", label: "≤ −0.6" },
   { value: -0.3, color: "#dfc27d" },
@@ -107,15 +117,15 @@ function put(rgba: Uint8Array, i: number, c: Rgba): void {
   rgba[o + 3] = c[3];
 }
 
-/** Continuous product (NDVI, NDWI, ΔNDVI): NaN inside the AOI renders as masked grey. */
+/** Continuous product (NDVI, NDWI, NDMI, ΔNDVI): NaN inside the AOI renders as masked grey. */
 export function renderContinuous(
   values: Float32Array,
   width: number,
   height: number,
   inside: Uint8Array,
-  kind: "ndvi" | "ndwi" | "delta_ndvi",
+  kind: "ndvi" | "ndwi" | "ndmi" | "delta_ndvi",
 ): RenderResult {
-  const stops = kind === "ndvi" ? NDVI_STOPS : kind === "ndwi" ? NDWI_STOPS : DELTA_NDVI_STOPS;
+  const stops = kind === "ndvi" ? NDVI_STOPS : kind === "ndwi" ? NDWI_STOPS : kind === "ndmi" ? NDMI_STOPS : DELTA_NDVI_STOPS;
   const ramp = colorRamp(stops);
   const rgba = new Uint8Array(width * height * 4);
   for (let i = 0; i < width * height; i++) {

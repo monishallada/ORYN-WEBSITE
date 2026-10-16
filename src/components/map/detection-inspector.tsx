@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api, ApiError, orgApi } from "@/components/map/api";
-import { detectionColor } from "@/components/map/legend";
+import { DetectionSwatch } from "@/components/map/legend";
 import { NotesThread } from "@/components/map/notes";
 import type { Detection, Observation } from "@/components/map/types";
 import type { InspectorPerms } from "@/components/map/aoi-inspector";
@@ -18,6 +18,7 @@ export function DetectionInspector({
   timeZone,
   onCompare,
   onShowObservation,
+  onShowChangeMap,
   onReviewed,
   onClose,
   onFocus,
@@ -28,6 +29,7 @@ export function DetectionInspector({
   timeZone: string;
   onCompare: (before: Observation, after: Observation) => void;
   onShowObservation: (o: Observation) => void;
+  onShowChangeMap: (d: Detection) => void;
   onReviewed: () => void;
   onClose: () => void;
   onFocus: (d: Detection) => void;
@@ -71,14 +73,28 @@ export function DetectionInspector({
   if (error) return <Notice tone="error" className="m-4">{error}</Notice>;
   if (!d) return <p className="p-4 text-[0.8125rem] text-bone-50/50">Loading detection…</p>;
   const m = d.metrics as { mean_delta?: number; min_delta?: number; max_delta?: number; pixel_count?: number; days_between?: number; same_grid?: boolean; valid_overlap_fraction?: number };
+  const isZone = d.type === "low_vigor_zone";
+  const z = d.metrics as {
+    rank?: number; mean_ndvi?: number; min_ndvi?: number; field_median?: number; deficit?: number; relative_deficit?: number; threshold?: number;
+    pixel_count?: number; share_of_valid_area?: number; edge_masked_fraction?: number; boundary_edge_fraction?: number;
+    persistence?: { state: "persistent" | "not_persistent" | "unknown"; date?: string; lowShare?: number; reason?: string };
+  };
+  const pct = (x: number | undefined) => (x === undefined ? "—" : `${Math.round(x * 100)}%`);
+  const persistenceText = !z.persistence
+    ? "—"
+    : z.persistence.state === "persistent"
+      ? `Also low on ${z.persistence.date} (${pct(z.persistence.lowShare)} of the zone)`
+      : z.persistence.state === "not_persistent"
+        ? `Not low on ${z.persistence.date} (${pct(z.persistence.lowShare)} of the zone)`
+        : (z.persistence.reason ?? "Not checked");
 
   return (
     <div className="flex flex-col gap-5 p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="t-eyebrow flex items-center gap-2 text-bone-50/45">
-            <span aria-hidden="true" className="size-2.5 rounded-[1px]" style={{ background: detectionColor(d.type) }} />
-            {d.type.replace(/_/g, " ")}
+            <DetectionSwatch type={d.type} />
+            {isZone ? "low-vigour zone" : d.type.replace(/_/g, " ")}
           </p>
           <h2 className="mt-1 text-[1.0625rem] font-medium leading-tight">{d.title}</h2>
           <p className="mt-1 text-[0.75rem] text-bone-50/55">
@@ -93,10 +109,40 @@ export function DetectionInspector({
         <button onClick={onClose} className="shrink-0 rounded-[3px] px-2 py-1 text-[0.75rem] text-bone-50/50 hover:bg-bone-50/[0.06]" aria-label="Close detection details">✕</button>
       </div>
 
-      <Notice tone="info">
-        This is a candidate change computed from two satellite observations. It indicates where measurements differ; it does not by itself establish what happened on the ground.
-      </Notice>
+      {isZone ? (
+        <Notice tone="info">
+          NDVI here was low relative to the rest of this area on {d.comparison ? formatDate(d.comparison.observedAt, timeZone) : "this date"}. That is a
+          measurement, not a diagnosis: planting gaps, a different crop or growth stage, bare soil or tracks, waterlogging, drought, nutrient, pest or disease
+          stress, lodging, and residual cloud shadow can all look like this. Check it in the field before acting.
+        </Notice>
+      ) : (
+        <Notice tone="info">
+          This is a candidate change computed from two satellite observations. It indicates where measurements differ; it does not by itself establish what happened on the ground.
+        </Notice>
+      )}
 
+      {isZone ? (
+        <section aria-label="Image">
+          <p className="t-eyebrow mb-2 text-bone-50/45">Image</p>
+          <div className="grid grid-cols-2 gap-2">
+            {[d.comparison, d.baseline].map((o, i) => (
+              <div key={i} className="rounded-[3px] border border-bone-50/[0.08] p-2 text-[0.75rem]">
+                <p className="text-bone-50/45">{i === 0 ? "Zone found in" : "Persistence checked in"}</p>
+                {o ? (
+                  <>
+                    <p className="mt-0.5">{formatDate(o.observedAt, timeZone)}</p>
+                    <p className="text-bone-50/50">{o.asset.platform ?? o.asset.collection}</p>
+                    <p className="text-bone-50/50">median {formatNumber(o.metrics.median as number, 3)}</p>
+                    <Button size="sm" className="mt-1.5" onClick={() => onShowObservation(o)}>Show NDVI</Button>
+                  </>
+                ) : (
+                  <p className="mt-0.5 text-bone-50/50">{i === 0 ? "Not available" : "No earlier usable image within 45 days"}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : (
       <section aria-label="Before and after">
         <p className="t-eyebrow mb-2 text-bone-50/45">Before and after</p>
         <div className="grid grid-cols-2 gap-2">
@@ -119,12 +165,30 @@ export function DetectionInspector({
         {d.baseline && d.comparison ? (
           <Button size="sm" variant="primary" className="mt-2 w-full" onClick={() => onCompare(d.baseline!, d.comparison!)}>Swipe-compare on map</Button>
         ) : null}
+        {d.changeMap ? (
+          <Button size="sm" className="mt-2 w-full" onClick={() => onShowChangeMap(d)}>Show change map (ΔNDVI)</Button>
+        ) : null}
       </section>
+      )}
 
       <section aria-label="Measurements">
         <p className="t-eyebrow mb-2 text-bone-50/45">Measurements</p>
         <KeyValues
-          items={[
+          items={isZone ? [
+            ["Rank in this image", z.rank !== undefined ? `#${z.rank} (by area × NDVI deficit)` : "—"],
+            ["Zone mean NDVI", formatNumber(z.mean_ndvi, 3)],
+            ["Area median NDVI", formatNumber(z.field_median, 3)],
+            ["Deficit", z.deficit !== undefined ? `${formatNumber(z.deficit, 3)} NDVI (${pct(z.relative_deficit)} below the median)` : "—"],
+            ["Zone threshold", z.threshold !== undefined ? `NDVI < ${formatNumber(z.threshold, 3)}` : "—"],
+            ["Lowest pixel", formatNumber(z.min_ndvi, 3)],
+            ["Pixels", formatNumber(z.pixel_count, 0)],
+            ["Share of usable area", pct(z.share_of_valid_area)],
+            ["Edge on masked pixels", pct(z.edge_masked_fraction)],
+            ["Edge on area boundary", pct(z.boundary_edge_fraction)],
+            ["Persistence", persistenceText],
+            ["Method", d.model ?? "—"],
+            ["Recorded", formatDateTime(d.createdAt, timeZone)],
+          ] : [
             ["Mean change", m.mean_delta !== undefined ? `${m.mean_delta > 0 ? "+" : ""}${formatNumber(m.mean_delta, 3)} NDVI` : "—"],
             ["Range", m.min_delta !== undefined ? `${formatNumber(m.min_delta, 2)} to ${formatNumber(m.max_delta, 2)}` : "—"],
             ["Pixels", formatNumber(m.pixel_count, 0)],

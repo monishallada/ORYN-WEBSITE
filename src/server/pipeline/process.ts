@@ -13,7 +13,7 @@
  *    why; transient read failures are retried by the queue.
  */
 import { createHash } from "node:crypto";
-import { analyzeLandcover, analyzeOptical, analyzeS1Water, type AnalysisOutput, type GridContext } from "@/server/analytics/analyze";
+import { analyzeLandcover, analyzeOptical, analyzeS1Water, type AnalysisOutput, type GridContext, type OpticalCollection } from "@/server/analytics/analyze";
 import { isRetryable, RasterAnalyticsError } from "@/server/analytics/errors";
 import { ANALYTICS, type AnalyticId } from "@/server/analytics/registry";
 import type { RasterRef } from "@/server/analytics/types";
@@ -56,11 +56,15 @@ export function tasksFor(collection: string, enabled: string[]): Task[] {
   switch (collection) {
     case "sentinel-2-l2a":
       return [
-        ...(on("ndvi", "ndvi-change", "ndvi-anomaly") ? [{ model: "ndvi" as const, kind: "ndvi" }] : []),
+        ...(on("ndvi", "ndvi-change", "ndvi-anomaly", "ndvi-zones") ? [{ model: "ndvi" as const, kind: "ndvi" }] : []),
+        ...(on("ndmi") ? [{ model: "ndmi" as const, kind: "ndmi" }] : []),
         ...(on("ndwi", "water-change") ? [{ model: "ndwi" as const, kind: "ndwi" }] : []),
       ];
     case "landsat-c2-l2":
-      return on("ndvi", "ndvi-change", "ndvi-anomaly") ? [{ model: "ndvi", kind: "ndvi" }] : [];
+      return [
+        ...(on("ndvi", "ndvi-change", "ndvi-anomaly", "ndvi-zones") ? [{ model: "ndvi" as const, kind: "ndvi" }] : []),
+        ...(on("ndmi") ? [{ model: "ndmi" as const, kind: "ndmi" }] : []),
+      ];
     case "sentinel-1-rtc":
       return on("s1-water", "water-change") ? [{ model: "s1-water", kind: "s1_water" }] : [];
     case "esa-worldcover":
@@ -175,17 +179,27 @@ export async function processAssetHandler(ctx: JobContext): Promise<unknown> {
     const outputs: Output[] = [];
 
     if (asset.collection === "sentinel-2-l2a" || asset.collection === "landsat-c2-l2") {
-      const r = await analyzeOptical({
+      const optical = {
         ...common,
-        collection: asset.collection,
+        collection: asset.collection as OpticalCollection,
         sceneCloudCover: asset.cloud_cover === null ? null : Number(asset.cloud_cover),
-        want: { ndvi: tasks.some((t) => t.model === "ndvi"), ndwi: tasks.some((t) => t.model === "ndwi"), trueColor: true },
         boaOffsetApplied: asset.properties["earthsearch:boa_offset_applied"] === true,
-      });
-      const grid: GridContext = { grid: r.grid, corners: r.corners, inside: r.inside, insideCount: r.insideCount };
-      const extraQuality = { mask_reasons: r.maskReasons };
-      if (r.ndvi) outputs.push({ task: { model: "ndvi", kind: "ndvi" }, out: r.ndvi, grid, trueColor: r.trueColor?.png ?? null, extraQuality });
-      if (r.ndwi) outputs.push({ task: { model: "ndwi", kind: "ndwi" }, out: r.ndwi, grid, trueColor: r.trueColor?.png ?? null, extraQuality });
+      };
+      const wantNdvi = tasks.some((t) => t.model === "ndvi");
+      const wantNdwi = tasks.some((t) => t.model === "ndwi");
+      if (wantNdvi || wantNdwi) {
+        const r = await analyzeOptical({ ...optical, want: { ndvi: wantNdvi, ndwi: wantNdwi, trueColor: true } });
+        const grid: GridContext = { grid: r.grid, corners: r.corners, inside: r.inside, insideCount: r.insideCount };
+        const extraQuality = { mask_reasons: r.maskReasons };
+        if (r.ndvi) outputs.push({ task: { model: "ndvi", kind: "ndvi" }, out: r.ndvi, grid, trueColor: r.trueColor?.png ?? null, extraQuality });
+        if (r.ndwi) outputs.push({ task: { model: "ndwi", kind: "ndwi" }, out: r.ndwi, grid, trueColor: r.trueColor?.png ?? null, extraQuality });
+      }
+      // NDMI on the native grid of its own bands (Sentinel-2 20 m, Landsat 30 m), so a separate read.
+      if (tasks.some((t) => t.model === "ndmi")) {
+        const m = await analyzeOptical({ ...optical, want: { ndvi: false, ndwi: false, trueColor: false, ndmi: true } });
+        const grid: GridContext = { grid: m.grid, corners: m.corners, inside: m.inside, insideCount: m.insideCount };
+        if (m.ndmi) outputs.push({ task: { model: "ndmi", kind: "ndmi" }, out: m.ndmi, grid, trueColor: null, extraQuality: { mask_reasons: m.maskReasons } });
+      }
     } else if (asset.collection === "sentinel-1-rtc") {
       const r = await analyzeS1Water(common);
       outputs.push({ task: tasks[0]!, out: r, grid: r, trueColor: null });
@@ -239,7 +253,7 @@ export async function processAssetHandler(ctx: JobContext): Promise<unknown> {
       const enabled = new Set(aoi.enabled_analytics);
       for (const c of created.filter((x) => x.status === "valid")) {
         const wantsFollowUp =
-          (c.kind === "ndvi" && (enabled.has("ndvi-change") || enabled.has("ndvi-anomaly"))) ||
+          (c.kind === "ndvi" && (enabled.has("ndvi-change") || enabled.has("ndvi-anomaly") || enabled.has("ndvi-zones"))) ||
           ((c.kind === "ndwi" || c.kind === "s1_water") && enabled.has("water-change"));
         if (wantsFollowUp) {
           await enqueueTx(tx, {
@@ -247,7 +261,7 @@ export async function processAssetHandler(ctx: JobContext): Promise<unknown> {
             type: JOB.aoiChangeDetection,
             payload: { aoiId: p.aoiId, observationId: c.id, reprocess: Boolean(p.reprocess), historical },
             priority: 70,
-            idempotencyKey: `change:${c.id}:${ANALYTICS["ndvi-change"].version}:${ANALYTICS["water-change"].version}`,
+            idempotencyKey: `change:${c.id}:${ANALYTICS["ndvi-change"].version}:${ANALYTICS["water-change"].version}:${ANALYTICS["ndvi-zones"].version}`,
             timeoutSeconds: 600,
           });
         }

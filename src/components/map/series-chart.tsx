@@ -38,10 +38,13 @@ export function SeriesChart({
   precip,
   title,
   yDomain = [-0.2, 1],
+  color = NDVI_COLOR,
   activeId,
   onSelect,
   timeZone,
 }: {
+  /** Series colour (validated against the precipitation blue on the dark surface). */
+  color?: string;
   points: SeriesPoint[];
   precip: PrecipPoint[];
   title: string;
@@ -149,10 +152,10 @@ export function SeriesChart({
               <text x={PAD.l - 6} y={y(v) + 3} textAnchor="end" fontSize={9} fill={AXIS_TEXT} className="tabular-nums">{v.toFixed(2).replace(/\.00$/, "")}</text>
             </g>
           ))}
-          {band ? <path d={band} fill={NDVI_COLOR} fillOpacity={0.12} /> : null}
-          {line ? <path d={line} fill="none" stroke={NDVI_COLOR} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" /> : null}
+          {band ? <path d={band} fill={color} fillOpacity={0.12} /> : null}
+          {line ? <path d={line} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" /> : null}
           {valid.map((p) => (
-            <circle key={p.id} cx={x(p.t)} cy={y(p.mean!)} r={p.id === activeId ? 5.5 : 4} fill={NDVI_COLOR} stroke="#0f1112" strokeWidth={2} />
+            <circle key={p.id} cx={x(p.t)} cy={y(p.mean!)} r={p.id === activeId ? 5.5 : 4} fill={color} stroke="#0f1112" strokeWidth={2} />
           ))}
           {/* Unusable observations: hollow marks on the foot rail. */}
           {sorted.filter((p) => p.status === "unusable").map((p) => (
@@ -186,7 +189,7 @@ export function SeriesChart({
           <p className="text-bone-50/55">{formatDate(hovered.t, timeZone)} · {hovered.source}</p>
           {hovered.status === "valid" ? (
             <>
-              <p className="mt-1 flex items-center gap-2"><span className="inline-block h-0.5 w-3" style={{ background: NDVI_COLOR }} /><span className="text-[0.8125rem] font-medium tabular-nums text-bone-50">{hovered.mean?.toFixed(3)}</span><span className="text-bone-50/55">mean</span></p>
+              <p className="mt-1 flex items-center gap-2"><span className="inline-block h-0.5 w-3" style={{ background: color }} /><span className="text-[0.8125rem] font-medium tabular-nums text-bone-50">{hovered.mean?.toFixed(3)}</span><span className="text-bone-50/55">mean</span></p>
               {hovered.p10 !== null ? <p className="text-bone-50/60 tabular-nums">p10–p90 {hovered.p10.toFixed(2)}–{hovered.p90?.toFixed(2)}</p> : null}
               {hovered.validFraction !== null ? <p className="text-bone-50/60">{Math.round(hovered.validFraction * 100)}% of area cloud-free</p> : null}
             </>
