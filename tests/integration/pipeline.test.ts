@@ -278,3 +278,96 @@ describe("change detection", () => {
     expect(resampled.grade).toBe("moderate");
   });
 });
+
+describe("agriculture: within-field zones, NDMI, and analytics backfill", () => {
+  beforeEach(resetDb);
+  afterAll(closeTestDb);
+
+  /** NDVI 0.7 with a 6 × 6 px (3,600 m²) patch at 0.4 in the corner, or NDMI when the call asks for it. */
+  function zonedOptical(p: unknown) {
+    const want = (p as { want: { ndmi?: boolean } }).want;
+    if (want.ndmi) {
+      const r = opticalResult(0.25);
+      return Promise.resolve({ ...r, ndvi: undefined, ndmi: { ...r.ndvi, legend: { kind: "ndmi", stops: [] } } });
+    }
+    const r = opticalResult(0.7, { patch: { value: 0.4, size: 6 } });
+    // Like the real reader: a true-colour image comes with the NDVI read when asked for.
+    return Promise.resolve((want as { trueColor?: boolean }).trueColor ? { ...r, trueColor: { png: Buffer.from([0x89, 0x50]), legend: { kind: "true_color" } } } : r);
+  }
+
+  it("delineates a low-vigour zone, grades it, and confirms persistence in the next image", async () => {
+    const { org, aoiId } = await setupOrg();
+    await ownerSql()`update aois set enabled_analytics = '{ndvi,ndvi-zones}' where id = ${aoiId}`;
+    analyzeMock.impl = zonedOptical;
+    await ingest(org.id, aoiId, asset("S2A_Z1", new Date("2026-10-01T16:00:00Z")));
+    await runAll();
+    const first = await ownerSql()<{ type: string; result_class: string; evidence_grade: string; metrics: Record<string, unknown>; area_m2: number; baseline_observation_id: string | null }[]>`
+      select type, result_class, evidence_grade, metrics, area_m2, baseline_observation_id from detections where aoi_id = ${aoiId}`;
+    expect(first).toHaveLength(1);
+    expect(first[0]).toMatchObject({ type: "low_vigor_zone", result_class: "deterministic_calculation", evidence_grade: "strong", area_m2: 3_600, baseline_observation_id: null });
+    expect(first[0]!.metrics).toMatchObject({ rank: 1, pixel_count: 36, field_median: expect.closeTo(0.7, 5), persistence: { state: "unknown" } });
+    expect(first[0]!.metrics.deficit).toBeCloseTo(0.3, 5);
+    const [run] = await ownerSql()<{ status: string; parameters: Record<string, unknown> }[]>`
+      select status, parameters from processing_runs where model_id = 'ndvi-zones' and aoi_id = ${aoiId}`;
+    expect(run).toMatchObject({ status: "succeeded", parameters: { k: 1.5, minDeficit: 0.1, minAreaM2: 2000, persistence_window_days: 45 } });
+
+    await ingest(org.id, aoiId, asset("S2A_Z2", new Date("2026-10-11T16:00:00Z")));
+    await runAll();
+    const second = await ownerSql()<{ evidence_grade: string; metrics: { persistence: { state: string; date?: string } }; evidence_reasons: string[]; first_observed_at: Date }[]>`
+      select d.evidence_grade, d.metrics, d.evidence_reasons, d.first_observed_at from detections d
+        join observations o on o.id = d.comparison_observation_id join source_assets s on s.id = o.asset_id
+       where d.aoi_id = ${aoiId} and s.external_id = 'S2A_Z2'`;
+    expect(second).toHaveLength(1);
+    expect(second[0]!.metrics.persistence).toMatchObject({ state: "persistent", date: "2026-10-01" });
+    expect(second[0]!.evidence_reasons.join(" ")).toMatch(/Also low in the previous usable image \(2026-10-01\)/);
+    expect(second[0]!.first_observed_at.toISOString().slice(0, 10)).toBe("2026-10-01");
+  });
+
+  it("computes NDMI in its own read, without a true-colour image", async () => {
+    const { org, aoiId } = await setupOrg();
+    await ownerSql()`update aois set enabled_analytics = '{ndvi,ndmi}' where id = ${aoiId}`;
+    const wants: unknown[] = [];
+    analyzeMock.impl = (p) => {
+      wants.push((p as { want: unknown }).want);
+      return zonedOptical(p);
+    };
+    await ingest(org.id, aoiId, asset("S2A_M1", new Date("2026-10-01T16:00:00Z")));
+    await runAll();
+    expect(wants).toEqual([
+      { ndvi: true, ndwi: false, trueColor: true },
+      { ndvi: false, ndwi: false, trueColor: false, ndmi: true },
+    ]);
+    const obs = await ownerSql()<{ kind: string; model_id: string; status: string; raster: Record<string, unknown> }[]>`
+      select kind, model_id, status, raster from observations where aoi_id = ${aoiId} order by kind`;
+    expect(obs.map((o) => [o.kind, o.model_id, o.status])).toEqual([["ndmi", "ndmi", "valid"], ["ndvi", "ndvi", "valid"]]);
+    expect(obs[0]!.raster.true_color_key).toBeUndefined();
+    expect(obs[1]!.raster.true_color_key).toBeDefined();
+  });
+
+  it("backfills analytics enabled later onto images already processed, once", async () => {
+    const { org, aoiId } = await setupOrg();
+    await ownerSql()`update aois set enabled_analytics = '{ndvi}' where id = ${aoiId}`;
+    analyzeMock.impl = zonedOptical;
+    await ingest(org.id, aoiId, asset("S2A_B1", new Date(Date.now() - 5 * 86_400_000)));
+    await runAll();
+    expect((await ownerSql()`select count(*)::int as n from detections where aoi_id = ${aoiId}`)[0]!.n).toBe(0);
+
+    const { member } = await import("./alerts.fixtures");
+    const { updateAoi } = await import("@/server/aois/service");
+    const admin = await member(org, "org_admin");
+    await updateAoi(admin.access, aoiId, { enabledAnalytics: ["ndvi", "ndmi", "ndvi-zones"] });
+    const queued = await ownerSql()<{ type: string; key: string; payload: Record<string, unknown> }[]>`
+      select type, idempotency_key as key, payload from jobs where status = 'queued' and type in ('aoi.process_asset', 'aoi.change_detection') order by type`;
+    expect(queued.map((j) => j.type)).toEqual(["aoi.change_detection", "aoi.process_asset"]);
+    expect(queued[0]!.payload).toMatchObject({ followUps: ["ndvi-zones"], historical: true });
+    expect(queued[1]!.key).toMatch(/^process:.*:analytics:[0-9a-f]{12}$/);
+
+    await runAll();
+    const kinds = await ownerSql()<{ kind: string }[]>`select kind from observations where aoi_id = ${aoiId} order by kind`;
+    expect(kinds.map((k) => k.kind)).toEqual(["ndmi", "ndvi"]);
+    expect((await ownerSql()`select count(*)::int as n from detections where aoi_id = ${aoiId} and type = 'low_vigor_zone'`)[0]!.n).toBe(1);
+    // Saving the same settings again queues nothing new.
+    await updateAoi(admin.access, aoiId, { enabledAnalytics: ["ndvi", "ndmi", "ndvi-zones"] });
+    expect((await ownerSql()`select count(*)::int as n from jobs where status = 'queued'`)[0]!.n).toBe(0);
+  });
+});

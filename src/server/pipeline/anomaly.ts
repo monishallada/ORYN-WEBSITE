@@ -69,7 +69,7 @@ export function selectBaseline(observedAt: Date, candidates: BaselineCandidate[]
   const seasonal = earlier.filter(
     (s) => t - s.at.getTime() >= SEASONAL_MIN_AGE_DAYS * DAY_MS && seasonalDistanceDays(s.at, observedAt) <= SEASON_HALF_WIDTH_DAYS,
   );
-  const strip = (xs: (BaselineSample & { at: Date })[]) => xs.map(({ at: _at, ...rest }) => rest);
+  const strip = (xs: (BaselineSample & { at: Date })[]): BaselineSample[] => xs.map((x) => ({ date: x.date, mean: x.mean, observations: x.observations }));
   if (seasonal.length >= MIN_BASELINE) {
     return { window: "seasonal", label: `same season, earlier years (±${SEASON_HALF_WIDTH_DAYS} days)`, samples: strip(seasonal) };
   }

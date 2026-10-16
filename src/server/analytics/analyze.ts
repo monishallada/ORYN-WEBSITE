@@ -1,6 +1,6 @@
 /**
  * Provider-agnostic analyses used by the processing pipeline: optical indices
- * (NDVI, NDWI, true colour), Sentinel-1 open-water candidates, and land-cover
+ * (NDVI, NDWI, NDMI, true colour), Sentinel-1 open-water candidates, and land-cover
  * composition — each for one AOI on one scene/item.
  *
  * Grid: the AOI (lon/lat) is projected into the asset's own CRS and its
@@ -217,19 +217,25 @@ function countFinite(values: Float32Array): number {
 
 export type OpticalCollection = "sentinel-2-l2a" | "landsat-c2-l2";
 
-type OpticalBands = { red: string; nir: string; green: string; blue: string; quality: string; visual: string | null };
+type OpticalBands = { red: string; nir: string; green: string; blue: string; nir08: string; swir16: string; quality: string; visual: string | null };
 
 /** Canonical asset keys per collection (ORYN NormalizedAsset.assets keys). */
 export const OPTICAL_BANDS: Record<OpticalCollection, OpticalBands> = {
-  "sentinel-2-l2a": { red: "red", nir: "nir", green: "green", blue: "blue", quality: "scl", visual: "visual" },
-  "landsat-c2-l2": { red: "red", nir: "nir08", green: "green", blue: "blue", quality: "qa_pixel", visual: null },
+  // NDMI uses the narrow NIR band and SWIR1: Sentinel-2 B8A/B11 (both 20 m), Landsat SR_B5/SR_B6 (30 m).
+  "sentinel-2-l2a": { red: "red", nir: "nir", green: "green", blue: "blue", nir08: "nir08", swir16: "swir16", quality: "scl", visual: "visual" },
+  "landsat-c2-l2": { red: "red", nir: "nir08", green: "green", blue: "blue", nir08: "nir08", swir16: "swir16", quality: "qa_pixel", visual: null },
 };
 
 export type AnalyzeOpticalParams = CommonParams & {
   collection: OpticalCollection;
   /** Provider-reported scene cloud cover (%), copied into quality. */
   sceneCloudCover: number | null;
-  want: { ndvi: boolean; ndwi: boolean; trueColor: boolean };
+  /**
+   * ndmi must be requested on its own: it is computed on the grid of its own
+   * bands (Sentinel-2 20 m, Landsat 30 m), never on the 10 m NDVI grid with
+   * duplicated pixels.
+   */
+  want: { ndvi: boolean; ndwi: boolean; trueColor: boolean; ndmi?: boolean };
   /** Sentinel-2 only: also accept SCL class 7 (unclassified). Default false. */
   includeUnclassified?: boolean;
   /**
@@ -252,6 +258,8 @@ export type OpticalResult = GridContext & {
   /** Quality-mask exclusions inside the AOI, by reason (pixels). */
   maskReasons: Record<string, number>;
   ndvi?: AnalysisOutput<NdviMetrics>;
+  /** Same metric shape as NDVI (index statistics over the AOI's valid pixels). */
+  ndmi?: AnalysisOutput<NdviMetrics>;
   ndwi?: AnalysisOutput<WaterMetrics> & { waterMask: Uint8Array };
   trueColor?: { png: Buffer; legend: Legend };
 };
@@ -284,7 +292,13 @@ export async function analyzeOptical(params: AnalyzeOpticalParams): Promise<Opti
   const { collection, want, assets } = params;
   const keys = OPTICAL_BANDS[collection];
   if (!keys) throw new InvalidInputError("unsupported_collection", `Optical analysis does not support collection "${String(collection)}".`);
-  if (!want.ndvi && !want.ndwi && !want.trueColor) throw new InvalidInputError("nothing_requested", "No optical product was requested.");
+  if (!want.ndvi && !want.ndwi && !want.trueColor && !want.ndmi) throw new InvalidInputError("nothing_requested", "No optical product was requested.");
+  if (want.ndmi && (want.ndvi || want.ndwi || want.trueColor)) {
+    throw new InvalidInputError(
+      "separate_grid_required",
+      "NDMI is computed on the native grid of its own bands (Sentinel-2 20 m, Landsat 30 m); request it in a separate call from NDVI, NDWI, and true colour.",
+    );
+  }
   if (want.ndwi && collection !== "sentinel-2-l2a") {
     throw new InvalidInputError("unsupported_product", "NDWI (analytic ndwi 1.0.0) is defined for Sentinel-2 L2A only.");
   }
@@ -298,7 +312,8 @@ export async function analyzeOptical(params: AnalyzeOpticalParams): Promise<Opti
   if (want.ndvi) add(keys.nir, keys.red);
   if (want.ndwi) add(keys.green, keys.nir);
   if (want.trueColor && !useVisual) add(keys.red, keys.green, keys.blue);
-  const analysing = want.ndvi || want.ndwi;
+  if (want.ndmi) add(keys.nir08, keys.swir16);
+  const analysing = Boolean(want.ndvi || want.ndwi || want.ndmi);
   for (const k of needed) requireAsset(assets, k, "this optical product");
   if (analysing) requireAsset(assets, keys.quality, "cloud masking");
 
@@ -342,7 +357,11 @@ export async function analyzeOptical(params: AnalyzeOpticalParams): Promise<Opti
         ? sclValidMask(q.values, { inside, footprint: q.footprint, includeUnclassified: params.includeUnclassified })
         : landsatQaValidMask(q.values, { inside, footprint: q.footprint });
     result.maskReasons = qualityMask.reasons;
-    const analysed = new Set<string>([...(want.ndvi ? [keys.nir, keys.red] : []), ...(want.ndwi ? [keys.green, keys.nir] : [])]);
+    const analysed = new Set<string>([
+      ...(want.ndvi ? [keys.nir, keys.red] : []),
+      ...(want.ndwi ? [keys.green, keys.nir] : []),
+      ...(want.ndmi ? [keys.nir08, keys.swir16] : []),
+    ]);
     for (const k of analysed) assertPlausibleReflectance(bands.get(k)!, qualityMask.valid, k);
   }
 
@@ -360,11 +379,11 @@ export async function analyzeOptical(params: AnalyzeOpticalParams): Promise<Opti
     return { values, counts, ...assessed };
   };
 
-  if (want.ndvi) {
-    const r = index(keys.nir, keys.red);
+  /** Index statistics over the AOI's valid pixels (NDVI, NDMI); null metrics when unusable. */
+  const indexOutput = (r: ReturnType<typeof index>, kind: "ndvi" | "ndmi"): AnalysisOutput<NdviMetrics> => {
     const stats = r.status === "valid" ? summarize(r.values) : null;
-    const rendered = renderContinuous(r.values, grid.width, grid.height, inside, "ndvi");
-    result.ndvi = {
+    const rendered = renderContinuous(r.values, grid.width, grid.height, inside, kind);
+    return {
       status: stats ? r.status : "unusable",
       metrics: stats
         ? {
@@ -387,7 +406,11 @@ export async function analyzeOptical(params: AnalyzeOpticalParams): Promise<Opti
       values: r.values,
       ...rendered,
     };
-  }
+  };
+
+  if (want.ndvi) result.ndvi = indexOutput(index(keys.nir, keys.red), "ndvi");
+  // NDMI (Gao 1996) = (NIR − SWIR1) / (NIR + SWIR1)
+  if (want.ndmi) result.ndmi = indexOutput(index(keys.nir08, keys.swir16), "ndmi");
 
   if (want.ndwi) {
     const r = index(keys.green, keys.nir);

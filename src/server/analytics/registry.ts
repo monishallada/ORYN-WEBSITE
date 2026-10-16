@@ -67,6 +67,31 @@ export const ANALYTICS = {
       "Values are not comparable across sensors without cross-calibration; series are compared within one sensor family.",
     ],
   },
+  ndmi: {
+    id: "ndmi",
+    version: "1.0.0",
+    name: "Normalized Difference Moisture Index",
+    resultClass: "deterministic_calculation",
+    description:
+      "NDMI = (NIR − SWIR1) / (NIR + SWIR1) (Gao 1996), computed per pixel from surface reflectance after each band's published scale and offset: Sentinel-2 L2A B8A/B11 on their native 20 m grid, or Landsat Collection 2 Level-2 SR_B5/SR_B6 at 30 m. Summarized over the AOI's valid pixels. Responds to vegetation canopy water content.",
+    inputContract: {
+      products: ["earth-search:sentinel-2-l2a", "planetary-computer:landsat-c2-l2"],
+      bands: { sentinel2: ["nir08 (B8A)", "swir16 (B11)", "scl"], landsat: ["nir08", "swir16", "qa_pixel"] },
+      reflectance: "surface reflectance (Level-2A / Level-2)",
+    },
+    outputSchema: {
+      metrics: ["mean", "median", "p10", "p90", "std", "min", "max", "valid_pixels", "total_pixels", "valid_fraction", "masked_fraction", "histogram"],
+      raster: "PNG visualization + Float32 grid in the source CRS (20 m Sentinel-2, 30 m Landsat)",
+    },
+    limitations: [
+      "NDMI responds to the water content and density of the vegetation canopy. It is not a measurement of soil moisture or root-zone water, and it cannot by itself establish irrigation need or failure.",
+      "Values depend strongly on crop type, growth stage, canopy cover, and soil background: compare an area with itself over time and with similar fields, not with a universal threshold.",
+      "Computed on a 20 m (Sentinel-2) or 30 m (Landsat) grid, coarser than 10 m NDVI; narrow features and field edges are blended with neighbouring land.",
+      S2_MASK_NOTE,
+      LANDSAT_MASK_NOTE,
+      "Values are not comparable across sensors without cross-calibration; series are compared within one sensor family.",
+    ],
+  },
   ndwi: {
     id: "ndwi",
     version: "1.0.0",
@@ -158,6 +183,26 @@ export const ANALYTICS = {
     limitations: [
       "Needs at least 3 baseline observations; otherwise reported as insufficient baseline.",
       "Crop rotation or management change makes prior seasons a poor baseline.",
+    ],
+  },
+  "ndvi-zones": {
+    id: "ndvi-zones",
+    version: "1.0.0",
+    name: "Within-field low-vigour zones",
+    resultClass: "deterministic_calculation",
+    description:
+      "Localized areas whose NDVI is low relative to the rest of the same area of interest on the same date. Threshold: the area's median NDVI minus the larger of 1.5 robust standard deviations (1.4826 × median absolute deviation) and 0.10; low pixels are grouped into 4-connected zones, zones under 2,000 m² are dropped, and zones are ranked by area × NDVI deficit. Each zone is checked against the previous usable image of the same sensor within 45 days (the same rule applied to that image) to report whether it persists.",
+    inputContract: { inputs: "One valid NDVI observation (stored Float32 grid and AOI mask); optionally the previous valid NDVI observation for persistence." },
+    outputSchema: {
+      detections: "type low_vigor_zone",
+      metrics: ["area_m2", "pixel_count", "mean_ndvi", "min_ndvi", "field_median", "deficit", "relative_deficit", "threshold", "score", "rank", "edge_masked_fraction", "persistence"],
+    },
+    limitations: [
+      "A low-vigour zone is NDVI that is low relative to the rest of the same area on the same date. It is not a diagnosis: possible causes include planting gaps or later emergence, a different crop or variety, bare soil or tracks, waterlogging, drought stress, nutrient deficiency, pest or disease, hail or lodging, and residual cloud shadow. Each zone needs a field check before any action.",
+      "Not computed when less than 70% of the area is usable in the image, when fewer than 100 pixels are usable, or when the area's median NDVI is below 0.3 (bare soil, before emergence, or after harvest), because relative differences are not meaningful then.",
+      "An area that mixes different crops, fields, or non-crop land will show the lowest-NDVI land use as zones; draw one field per area for field-level results.",
+      "Pixels are 10 m (Sentinel-2) or 30 m (Landsat); zones smaller than 0.2 ha are not reported and field edges mix with neighbouring land.",
+      "Persistence across images raises confidence that a pattern is real, but does not establish its cause.",
     ],
   },
   "alert-rule": {
