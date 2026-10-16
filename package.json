@@ -25,6 +25,7 @@
     "oryn:admin": "tsx scripts/oryn/admin.ts",
     "oryn:accounts": "tsx scripts/oryn/accounts.ts",
     "oryn:verify": "tsx scripts/oryn/verify.ts",
+    "oryn:smoke": "tsx scripts/oryn/smoke.ts",
     "worker": "tsx scripts/oryn/worker.ts",
     "build:scripts": "node scripts/build-scripts.mjs",
     "start:worker": "node dist/worker.mjs"
