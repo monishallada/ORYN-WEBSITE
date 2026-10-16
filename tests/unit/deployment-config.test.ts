@@ -93,14 +93,50 @@ describe("container platform fallbacks", () => {
 });
 
 describe("database TLS on private networks", () => {
-  it("gives pg the libpq meaning of sslmode=require (encrypt, no verification); other modes pass through", async () => {
-    const { pgConnectionOptions } = await import("@/server/auth/options");
+  afterEach(() => vi.unstubAllEnvs());
+  const CA = "-----BEGIN CERTIFICATE-----\nMIIBfakeCAcertificateForTests\n-----END CERTIFICATE-----";
+
+  it("without a CA: pg gets libpq's sslmode=require; other modes and postgres.js are left to the URL", async () => {
+    const { pgConnectionOptions, postgresTlsOptions } = await import("@/server/db/tls");
+    vi.stubEnv("DATABASE_CA_CERT", "");
     expect(pgConnectionOptions("postgres://u:p@db.railway.internal:5432/railway?sslmode=require&application_name=x")).toEqual({
       connectionString: "postgres://u:p@db.railway.internal:5432/railway?application_name=x",
       ssl: { rejectUnauthorized: false },
     });
     for (const url of ["postgres://u:p@db.example.org/oryn?sslmode=verify-full", "postgres://u:p@localhost/oryn"]) {
       expect(pgConnectionOptions(url)).toEqual({ connectionString: url });
+      // No `ssl` key at all: postgres.js treats a present-but-undefined `ssl` as "no TLS".
+      expect(Object.keys(postgresTlsOptions(url))).toEqual([]);
     }
+  });
+
+  it("with DATABASE_CA_CERT: verify-full checks chain and host name in both clients; verify-ca checks the chain", async () => {
+    const { pgConnectionOptions, postgresTlsOptions } = await import("@/server/db/tls");
+    vi.stubEnv("DATABASE_CA_CERT", CA.replace(/\n/g, "\\n")); // single-line secret stores
+    const full = "postgres://u:p@postgres.railway.internal:5432/railway?sslmode=verify-full";
+    const pjs = postgresTlsOptions(full).ssl!;
+    expect(pjs).toMatchObject({ ca: CA, rejectUnauthorized: true });
+    const pgo = pgConnectionOptions(full);
+    expect(pgo.connectionString).toBe("postgres://u:p@postgres.railway.internal:5432/railway");
+    expect(pgo.ssl).toMatchObject({ ca: CA, rejectUnauthorized: true });
+    // The host name is checked against the URL's host, whatever server name the client sent.
+    const cert = { subject: { CN: "localhost" }, subjectaltname: "DNS:localhost, DNS:postgres.railway.internal" } as never;
+    for (const check of [pjs.checkServerIdentity!, pgo.ssl!.checkServerIdentity!]) {
+      expect(check("localhost", cert)).toBeUndefined();
+    }
+    const ipUrl = full.replace("postgres.railway.internal", "10.0.0.5");
+    expect(postgresTlsOptions(ipUrl).ssl!.checkServerIdentity!("localhost", cert)).toBeInstanceOf(Error);
+    const ca = postgresTlsOptions(full.replace("verify-full", "verify-ca")).ssl!;
+    expect(ca).toMatchObject({ ca: CA, rejectUnauthorized: true });
+    expect(ca.checkServerIdentity?.("other.host", {} as never)).toBeUndefined();
+    // A CA never weakens other modes.
+    expect(pgConnectionOptions(full.replace("verify-full", "require")).ssl).toEqual({ rejectUnauthorized: false });
+    expect(Object.keys(postgresTlsOptions(full.replace("?sslmode=verify-full", "")))).toEqual([]);
+  });
+
+  it("refuses a DATABASE_CA_CERT that is not a PEM certificate", async () => {
+    const { postgresTlsOptions } = await import("@/server/db/tls");
+    vi.stubEnv("DATABASE_CA_CERT", "not-a-certificate");
+    expect(() => postgresTlsOptions("postgres://u:p@h/db?sslmode=verify-full")).toThrow(/not a PEM certificate/);
   });
 });

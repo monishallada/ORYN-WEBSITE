@@ -20,6 +20,7 @@
  */
 import postgres from "postgres";
 import { planMigrations } from "@/server/db/migrate";
+import { postgresTlsOptions } from "@/server/db/tls";
 import { GATED_INTEGRATION_IDS } from "@/server/integrations";
 import { log } from "@/server/log";
 
@@ -128,7 +129,14 @@ export function checkConfiguration(role: ServiceRole, e: Env = process.env): Pre
     if (!isLocalHost(u.hostname) && !["require", "verify-ca", "verify-full", "true"].includes(ssl ?? "")) {
       warn("db_tls", `${name} does not request TLS (add ?sslmode=verify-full, or require on a private network).`);
     }
+    if (val(e, "DATABASE_CA_CERT") && ssl !== "verify-full" && ssl !== "verify-ca") {
+      warn("db_ca_unused", `DATABASE_CA_CERT is set but ${name} does not use sslmode=verify-full, so the certificate is not verified.`);
+    }
   };
+  const ca = val(e, "DATABASE_CA_CERT");
+  if (ca && !/-----BEGIN CERTIFICATE-----[\s\S]+-----END CERTIFICATE-----/.test(ca.replace(/\\n/g, "\n"))) {
+    err("db_ca_invalid", "DATABASE_CA_CERT is not a PEM certificate (expected -----BEGIN CERTIFICATE-----).");
+  }
   if (service) {
     if (!app) err("db_url_missing", "DATABASE_URL is not set.");
     else {
@@ -241,7 +249,7 @@ export async function runStartupPreflight(role: "web" | "worker", e: Env = proce
   const issues = checkConfiguration(role, e);
   const production = e.NODE_ENV === "production";
   if (production && val(e, "DATABASE_URL") && !issues.some((i) => i.level === "error" && i.code.startsWith("db_"))) {
-    const sql = postgres(val(e, "DATABASE_URL")!, { max: 1, onnotice: () => {}, connect_timeout: 10, connection: { application_name: `oryn-preflight-${role}` } });
+    const sql = postgres(val(e, "DATABASE_URL")!, { ...postgresTlsOptions(val(e, "DATABASE_URL")!), max: 1, onnotice: () => {}, connect_timeout: 10, connection: { application_name: `oryn-preflight-${role}` } });
     try {
       issues.push(...(await checkDatabase(sql, role)));
     } catch (err) {

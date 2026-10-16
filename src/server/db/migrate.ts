@@ -17,6 +17,7 @@ import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import postgres from "postgres";
+import { postgresTlsOptions } from "@/server/db/tls";
 
 export type MigrationResult = { applied: string[]; skipped: string[] };
 export type MigrationPlan = { applied: string[]; pending: string[]; modified: string[]; unknown: string[] };
@@ -60,7 +61,7 @@ export async function runMigrations(
   dir = migrationsDir(),
   opts: { lockTimeout?: string; statementTimeout?: string; log?: (line: string) => void } = {},
 ): Promise<MigrationResult> {
-  const sql = postgres(connectionString, { max: 1, onnotice: () => {}, connection: { application_name: "oryn-migrate" } });
+  const sql = postgres(connectionString, { ...postgresTlsOptions(connectionString), max: 1, onnotice: () => {}, connection: { application_name: "oryn-migrate" } });
   const applied: string[] = [];
   const skipped: string[] = [];
   const say = opts.log ?? (() => {});

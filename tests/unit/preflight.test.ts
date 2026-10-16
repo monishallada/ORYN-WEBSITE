@@ -56,6 +56,15 @@ describe("production preflight", () => {
     expect(codes({ NODE_ENV: "production" }, "migrate", "error")).toContain("owner_url_missing");
   });
 
+  it("checks DATABASE_CA_CERT: must be PEM, and is flagged when no URL verifies against it", () => {
+    const pem = "-----BEGIN CERTIFICATE-----\\nMIIBfake\\n-----END CERTIFICATE-----";
+    expect(codes({ ...base, DATABASE_CA_CERT: pem }, "web")).not.toContain("db_ca_invalid");
+    expect(codes({ ...base, DATABASE_CA_CERT: pem }, "web")).not.toContain("db_ca_unused");
+    expect(codes({ ...base, DATABASE_CA_CERT: "not-a-cert" }, "web", "error")).toContain("db_ca_invalid");
+    const requireOnly = { ...base, DATABASE_URL: base.DATABASE_URL.replace("verify-full", "require"), DATABASE_CA_CERT: pem };
+    expect(codes(requireOnly, "web", "warning")).toContain("db_ca_unused");
+  });
+
   it("requires S3 object storage unless local storage is chosen deliberately", () => {
     expect(codes({ ...base, ORYN_STORAGE_DRIVER: "local" }, "worker", "error")).toContain("storage_local");
     expect(codes({ ...base, ORYN_STORAGE_DRIVER: "local", ORYN_ALLOW_LOCAL_STORAGE_IN_PRODUCTION: "true" }, "worker", "error")).toEqual([]);

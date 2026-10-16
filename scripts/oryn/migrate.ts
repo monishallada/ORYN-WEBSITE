@@ -10,6 +10,7 @@
  * docs/DEPLOYMENT.md for the rollback procedure (restore, or roll forward).
  */
 import { loadEnvConfig } from "@next/env";
+import { postgresTlsOptions } from "@/server/db/tls";
 
 async function main() {
   loadEnvConfig(process.cwd(), process.env.NODE_ENV !== "production");
@@ -23,7 +24,7 @@ async function main() {
   if (!url) throw new Error("DATABASE_OWNER_URL is not set.");
 
   if (process.argv.includes("--status") || process.argv.includes("--check")) {
-    const sql = postgres(url, { max: 1, onnotice: () => {} });
+    const sql = postgres(url, { ...postgresTlsOptions(url), max: 1, onnotice: () => {} });
     try {
       const plan = await planMigrations(sql);
       console.log(JSON.stringify(plan, null, 2));

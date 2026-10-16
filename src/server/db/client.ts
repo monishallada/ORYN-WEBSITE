@@ -17,6 +17,7 @@
  */
 import postgres from "postgres";
 import { env } from "@/server/config/env";
+import { postgresTlsOptions } from "@/server/db/tls";
 import { log } from "@/server/log";
 
 export type Sql = postgres.Sql;
@@ -28,7 +29,9 @@ const g = globalThis as GlobalWithDb;
 /** Shared pool for the application role. Reused across hot reloads in development. */
 export function db(): Sql {
   if (!g.__orynSql) {
-    g.__orynSql = postgres(env.databaseUrl(), {
+    const url = env.databaseUrl();
+    g.__orynSql = postgres(url, {
+      ...postgresTlsOptions(url),
       max: env.dbPoolMax(),
       idle_timeout: 30,
       connect_timeout: 10,

@@ -4,7 +4,8 @@
  *
  *   npm run oryn:admin -- create --email ops@example.com --name "Ops Lead" [--username ops.lead]
  *       Creates the account (password from ORYN_ADMIN_PASSWORD, or a random
- *       one printed once) and grants platform administration.
+ *       one printed once), grants platform administration, and requires a
+ *       password change at first sign-in (the password is operator-issued).
  *       Partner and trial accounts are managed with `npm run oryn:accounts`.
  *   npm run oryn:admin -- grant  --email person@example.com
  *   npm run oryn:admin -- revoke --email person@example.com
@@ -12,6 +13,7 @@
  */
 import { randomBytes } from "node:crypto";
 import { loadEnvConfig } from "@next/env";
+import { postgresTlsOptions } from "@/server/db/tls";
 
 function arg(name: string): string | undefined {
   const i = process.argv.indexOf(`--${name}`);
@@ -28,7 +30,7 @@ async function main() {
   ]);
   const ownerUrl = process.env.DATABASE_OWNER_URL;
   if (!ownerUrl) throw new Error("DATABASE_OWNER_URL is required.");
-  const owner = postgres(ownerUrl, { max: 1, onnotice: () => {} });
+  const owner = postgres(ownerUrl, { ...postgresTlsOptions(ownerUrl), max: 1, onnotice: () => {} });
   const cmd = process.argv[2];
   const email = arg("email")?.toLowerCase();
   try {
@@ -52,6 +54,14 @@ async function main() {
 
     const [user] = await owner<{ id: string }[]>`select id from auth_user where lower(email) = ${email}`;
     if (!user) throw new Error(`No account for ${email}.`);
+    if (cmd === "create") {
+      // The operator chose or saw this password, so it is temporary: the owner
+      // must replace it before opening any organization (as for partner accounts).
+      await owner`
+        insert into account_controls (user_id, must_change_password) values (${user.id}, true)
+        on conflict (user_id) do update set must_change_password = true`;
+      console.log("A password change is required at first sign-in.");
+    }
     const operator = process.env.USER ?? "cli";
     if (cmd === "revoke") {
       await owner`delete from platform_admins where user_id = ${user.id}`;
