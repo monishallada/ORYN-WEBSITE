@@ -117,8 +117,34 @@ async function main() {
             ${sql.json({ ndvi_delta: 0.2 })}, 'strong', ${["Synthetic fixture for end-to-end tests."]}, ${"e2e-" + randomUUID()})
     returning id`;
 
+  // A synthetic within-field low-vigour zone on the farm, found in one synthetic NDVI observation.
+  const [zAsset] = await sql<{ id: string }[]>`
+    insert into source_assets (provider_id, collection, external_id, kind, platform, acquired_at, footprint, cloud_cover, gsd_m, epsg, grid_code, metadata_hash, license, attribution)
+    values ('e2e', 'sentinel-2-l2a', ${"E2E_" + randomUUID()}, 'optical', 'synthetic', now() - interval '4 days',
+            ST_SetSRID(ST_GeomFromGeoJSON(${square(-77.6, 35.7, 0.3)}), 4326), 3, 10, 32618, 'MGRS-18STE', 'e2e', 'synthetic test fixture', 'Synthetic test fixture')
+    returning id`;
+  const [zRun] = await sql<{ id: string }[]>`
+    insert into processing_runs (org_id, aoi_id, model_id, model_version, status, input_asset_ids, software_version, finished_at)
+    values (${farm}, ${farmAoi}, 'ndvi', '1.0.0', 'succeeded', ${[zAsset!.id]}::uuid[], 'e2e', now()) returning id`;
+  const [zObs] = await sql<{ id: string }[]>`
+    insert into observations (org_id, aoi_id, run_id, asset_id, model_id, model_version, kind, result_class, observed_at, status, metrics, quality)
+    values (${farm}, ${farmAoi}, ${zRun!.id}, ${zAsset!.id}, 'ndvi', '1.0.0', 'ndvi', 'deterministic_calculation', now() - interval '4 days', 'valid',
+            ${sql.json({ mean: 0.8, median: 0.82, p10: 0.7, p90: 0.88, valid_fraction: 0.97 })}, ${sql.json({ coverage_fraction: 1, masked_fraction: 0.03, flags: [], gsd_m: 10, scene_cloud_cover: 3 })})
+    returning id`;
+  const [zone] = await sql<{ id: string }[]>`
+    insert into detections (org_id, aoi_id, type, result_class, title, geom, area_m2, comparison_observation_id, comparison_observed_at,
+                            first_observed_at, last_observed_at, source_asset_ids, model_id, model_version, metrics, thresholds,
+                            evidence_grade, evidence_reasons, limitations, dedupe_key)
+    values (${farm}, ${farmAoi}, 'low_vigor_zone', 'deterministic_calculation', 'E2E low-vigour zone #1: NDVI 0.55 vs field median 0.82, 0.6 ha',
+            ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON(${square(-77.446, 35.844, 0.0008)}), 4326)), 6400, ${zObs!.id}, now() - interval '4 days',
+            now() - interval '4 days', now() - interval '4 days', ${[zAsset!.id]}::uuid[], 'ndvi-zones', '1.0.0',
+            ${sql.json({ rank: 1, pixel_count: 64, area_m2: 6400, mean_ndvi: 0.55, min_ndvi: 0.41, field_median: 0.82, deficit: 0.27, relative_deficit: 0.33, threshold: 0.7, score: 0.17, edge_masked_fraction: 0, boundary_edge_fraction: 0.1, share_of_valid_area: 0.02, persistence: { state: "unknown", reason: "No earlier usable image within 45 days to check persistence." } })},
+            ${sql.json({ k: 1.5, min_deficit: 0.1, min_area_m2: 2000, threshold_ndvi: 0.7 })}, 'strong', ${["Synthetic fixture for end-to-end tests."]},
+            ${["A low-vigour zone is NDVI that is low relative to the rest of the same area on the same date. It is not a diagnosis."]}, ${"e2e-" + randomUUID()})
+    returning id`;
+
   await sql`delete from auth_rate_limit`;
-  console.log(JSON.stringify({ password, farm, city, farmAoi, cityAoi, trialAoi, detection: det!.id }));
+  console.log(JSON.stringify({ password, farm, city, farmAoi, cityAoi, trialAoi, detection: det!.id, zone: zone!.id }));
   await sql.end();
   await authOpts.closeAuthPool();
   await db.closeDb();

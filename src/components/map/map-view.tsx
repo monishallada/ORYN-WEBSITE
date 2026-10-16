@@ -107,19 +107,40 @@ function addOrynLayers(map: MlMap) {
   const typeColor: unknown[] = ["match", ["get", "type"]];
   for (const [t, c] of Object.entries(DETECTION_COLORS)) typeColor.push(t, c.color);
   typeColor.push("#9085e9");
+  const dashedTypes = Object.entries(DETECTION_COLORS).filter(([, c]) => c.dashed).map(([t]) => t);
+  const isDashed = ["in", ["get", "type"], ["literal", dashedTypes]];
   map.addLayer({
     id: `${MINE}det-fill`,
     type: "fill",
     source: `${MINE}detections`,
     paint: {
       "fill-color": typeColor as never,
-      "fill-opacity": ["case", ["==", ["get", "verification_status"], "dismissed"], 0.08, ["boolean", ["feature-state", "selected"], false], 0.55, 0.35],
+      // Dashed (single-date) findings get a faint fill so the imagery underneath stays readable.
+      "fill-opacity": [
+        "case",
+        ["==", ["get", "verification_status"], "dismissed"], 0.06,
+        isDashed, ["case", ["boolean", ["feature-state", "selected"], false], 0.28, 0.12],
+        ["boolean", ["feature-state", "selected"], false], 0.55, 0.35,
+      ] as never,
+    },
+  });
+  map.addLayer({
+    id: `${MINE}zone-line`,
+    type: "line",
+    source: `${MINE}detections`,
+    filter: isDashed as never,
+    paint: {
+      "line-color": ["case", ["boolean", ["feature-state", "selected"], false], "#ffffff", typeColor as never] as never,
+      "line-width": ["case", ["boolean", ["feature-state", "selected"], false], 2.5, 1.5],
+      "line-dasharray": [2, 1.5],
+      "line-opacity": ["case", ["==", ["get", "verification_status"], "dismissed"], 0.35, 1],
     },
   });
   map.addLayer({
     id: `${MINE}det-line`,
     type: "line",
     source: `${MINE}detections`,
+    filter: ["!", isDashed] as never,
     paint: {
       "line-color": ["case", ["boolean", ["feature-state", "selected"], false], "#ffffff", typeColor as never],
       "line-width": ["case", ["boolean", ["feature-state", "selected"], false], 2.5, 1.25],

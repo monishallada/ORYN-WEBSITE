@@ -10,6 +10,7 @@
 import { z } from "zod";
 import type { Geometry } from "@/lib/geo";
 import { currentModelKeys } from "@/server/analytics/registry";
+import { DELTA_NDVI_STOPS, MASKED_STOP } from "@/server/analytics/render";
 import type { ObservationQuality, RasterRef } from "@/server/analytics/types";
 import { recordAudit } from "@/server/audit";
 import type { OrgAccess } from "@/server/authz/access";
@@ -179,6 +180,24 @@ export async function observationPng(access: OrgAccess, id: string, layer: "inde
   return obj.body;
 }
 
+/** PNG of the ΔNDVI map from the comparison that produced a detection (storage key from the run, never from input). */
+export async function detectionChangePng(access: OrgAccess, id: string): Promise<Buffer> {
+  access.assert("results.read");
+  assertId(id, "Detection");
+  const key = await access.tx(async (tx) => {
+    const [r] = await tx<{ key: string | null }[]>`
+      select r.outputs->>'delta_png_key' as key
+        from detections d join aois a on a.id = d.aoi_id left join processing_runs r on r.id = d.run_id and r.org_id = d.org_id
+       where d.org_id = ${access.org.id} and d.id = ${id} ${aoiVisibleTo(tx, access)}`;
+    if (!r) throw notFoundError("Detection");
+    return r.key;
+  });
+  if (!key) throw new DomainError("no_raster", "This detection has no stored change map.", 404);
+  const obj = await storage().get(key);
+  if (!obj) throw new DomainError("raster_missing", "The change map is missing from storage.", 404);
+  return obj.body;
+}
+
 // ── Imagery available for an AOI ───────────────────────────────
 
 export type AoiAssetView = {
@@ -292,6 +311,8 @@ export type DetectionDetail = {
   context: { warnings: { id: string; title: string; severity: string | null; event_start: Date | null; event_end: Date | null }[] };
   /** Organization reference features (permits, parcels, OSM infrastructure) intersecting the detection. */
   referenceMatches: ReferenceMatch[];
+  /** The rendered ΔNDVI map of the comparison that produced this candidate, when one was stored. */
+  changeMap: { corners: RasterRef["corners"]; legend: RasterRef["legend"] } | null;
 };
 
 export async function getDetection(access: OrgAccess, id: string): Promise<DetectionDetail> {
@@ -370,6 +391,13 @@ export async function getDetection(access: OrgAccess, id: string): Promise<Detec
       relatedAlerts,
       context: { warnings },
       referenceMatches: matches,
+      changeMap:
+        run && typeof run.outputs.delta_png_key === "string" && Array.isArray(run.outputs.corners)
+          ? {
+              corners: run.outputs.corners as RasterRef["corners"],
+              legend: { kind: "delta_ndvi", min: DELTA_NDVI_STOPS[0]!.value, max: DELTA_NDVI_STOPS.at(-1)!.value, stops: [...DELTA_NDVI_STOPS, MASKED_STOP] },
+            }
+          : null,
     };
   });
 }

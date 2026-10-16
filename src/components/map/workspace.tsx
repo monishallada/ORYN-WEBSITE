@@ -51,6 +51,8 @@ export function MapWorkspace(props: WorkspaceProps) {
   const [layer, setLayer] = useState<"index" | "true_color">("index");
   const [opacity, setOpacity] = useState(0.85);
   const [compare, setCompare] = useState<Observation | null>(null);
+  /** ΔNDVI map of a candidate change's comparison, shown instead of the observation raster. */
+  const [changeMap, setChangeMap] = useState<{ detectionId: string; url: string; corners: NonNullable<Observation["corners"]>; legend: NonNullable<Observation["legend"]>; label: string } | null>(null);
   const [swipe, setSwipe] = useState(50);
   const [timeline, setTimeline] = useState<Observation[]>([]);
   const [drawMode, setDrawMode] = useState<DrawMode | null>(props.focus.draw && perms.write ? "polygon" : null);
@@ -176,6 +178,14 @@ export function MapWorkspace(props: WorkspaceProps) {
     if (!o || !o.corners) return null;
     const useLayer = l === "true_color" && o.hasTrueColor ? "true_color" : "index";
     return { url: `${orgApi(slug)}/observations/${o.id}/raster?layer=${useLayer}`, corners: o.corners, opacity };
+  };
+
+  const primaryRaster: RasterOverlay | null = changeMap ? { url: changeMap.url, corners: changeMap.corners, opacity } : rasterFor(active, layer);
+  /** Show one observation on the map (clears any comparison or change map). */
+  const showObservation = (o: Observation | null) => {
+    setChangeMap(null);
+    setCompare(null);
+    setActive(o);
   };
 
   const gsd = active?.asset.gsdM ?? active?.quality.gsd_m ?? null;
@@ -403,7 +413,7 @@ export function MapWorkspace(props: WorkspaceProps) {
           showDetections={showDetections}
           selectedAoiId={selAoi}
           selectedDetectionId={selDet}
-          raster={rasterFor(active, layer)}
+          raster={primaryRaster}
           references={refData}
           initialBounds={props.initialBounds}
           drawMode={draft ? null : drawMode}
@@ -506,8 +516,17 @@ export function MapWorkspace(props: WorkspaceProps) {
         ) : null}
 
         {/* Active imagery strip */}
-        {active || timelineObs.length ? (
+        {active || timelineObs.length || changeMap ? (
           <div className="absolute inset-x-3 bottom-3 z-10 rounded-[4px] border border-bone-50/[0.1] bg-ink-950/92 p-3 backdrop-blur lg:right-auto lg:max-w-[min(760px,calc(100%-420px))]">
+            {changeMap ? (
+              <div className="mb-2 flex flex-wrap items-center gap-3 border-b border-bone-50/[0.08] pb-2 text-[0.75rem]">
+                <span className="font-medium">ΔNDVI change map · {changeMap.label}</span>
+                <span className="text-bone-50/50">after − before, on pixels clear in both images</span>
+                <label className="flex items-center gap-1.5 text-bone-50/60">Opacity<input type="range" min={0.1} max={1} step={0.05} value={opacity} onChange={(e) => setOpacity(Number(e.target.value))} /></label>
+                <button className="text-bone-50/50 hover:text-bone-50" onClick={() => setChangeMap(null)}>Hide change map</button>
+                <div className="w-full max-w-md"><RasterLegend legend={changeMap.legend} /></div>
+              </div>
+            ) : null}
             <div className="flex flex-wrap items-center gap-3 text-[0.75rem]">
               {active ? (
                 <>
@@ -522,7 +541,7 @@ export function MapWorkspace(props: WorkspaceProps) {
                   ) : null}
                   <label className="flex items-center gap-1.5 text-bone-50/60">Opacity<input type="range" min={0.1} max={1} step={0.05} value={opacity} onChange={(e) => setOpacity(Number(e.target.value))} /></label>
                   {timeline.filter((o) => o.asset.id === active.asset.id && o.hasRaster && o.status === "valid" && o.id !== active.id).map((o) => (
-                    <button key={o.id} onClick={() => { setCompare(null); setActive(o); }} className="rounded-[3px] border border-bone-50/15 px-2 py-0.5 text-bone-50/70 hover:border-bone-50/40">
+                    <button key={o.id} onClick={() => showObservation(o)} className="rounded-[3px] border border-bone-50/15 px-2 py-0.5 text-bone-50/70 hover:border-bone-50/40">
                       Show {o.kind.toUpperCase().replace("_", " ")}
                     </button>
                   ))}
@@ -530,18 +549,21 @@ export function MapWorkspace(props: WorkspaceProps) {
                     aria-label="Compare with another date"
                     className="rounded-[3px] border border-bone-50/15 bg-ink-950 px-2 py-0.5 text-[0.75rem] text-bone-50"
                     value={compare?.id ?? ""}
-                    onChange={(e) => setCompare(timelineObs.find((o) => o.id === e.target.value) ?? null)}
+                    onChange={(e) => {
+                      setChangeMap(null);
+                      setCompare(timelineObs.find((o) => o.id === e.target.value) ?? null);
+                    }}
                   >
                     <option value="">Compare with…</option>
                     {timelineObs.filter((o) => o.id !== active.id && o.status === "valid").map((o) => <option key={o.id} value={o.id}>{formatDate(o.observedAt, timeZone)}</option>)}
                   </select>
-                  <button className="text-bone-50/50 hover:text-bone-50" onClick={() => { setActive(null); setCompare(null); }}>Hide imagery</button>
+                  <button className="text-bone-50/50 hover:text-bone-50" onClick={() => showObservation(null)}>Hide imagery</button>
                 </>
               ) : (
                 <span className="text-bone-50/55">Select a date to display imagery for this area.</span>
               )}
             </div>
-            {active?.legend && layer === "index" ? (
+            {active?.legend && layer === "index" && !changeMap ? (
               <div className="mt-2 max-w-md"><RasterLegend legend={active.legend} /></div>
             ) : null}
             {timelineObs.length ? (
@@ -552,7 +574,7 @@ export function MapWorkspace(props: WorkspaceProps) {
                     role="option"
                     aria-selected={active?.id === o.id}
                     title={`${formatDate(o.observedAt, timeZone)}${o.status === "unusable" ? " — unusable" : ""}`}
-                    onClick={() => o.status === "valid" && setActive(o)}
+                    onClick={() => o.status === "valid" && (setChangeMap(null), setActive(o))}
                     disabled={o.status !== "valid"}
                     className={cn(
                       "t-mono shrink-0 rounded-[2px] border px-1.5 py-0.5 text-[0.625rem]",
@@ -599,14 +621,24 @@ export function MapWorkspace(props: WorkspaceProps) {
                 onClose={() => setSelDet(null)}
                 onReviewed={refreshDetections}
                 onFocus={(d: Detection) => mapRef.current?.fitBounds(d.bbox, { maxZoom: 16, padding: 120 })}
-                onShowObservation={(o) => {
-                  setCompare(null);
-                  setActive(o);
-                }}
+                onShowObservation={showObservation}
                 onCompare={(before, after) => {
+                  setChangeMap(null);
                   setActive(after);
                   setCompare(before);
                   setSwipe(50);
+                }}
+                onShowChangeMap={(d: Detection) => {
+                  if (!d.changeMap) return;
+                  setCompare(null);
+                  setActive(d.comparison);
+                  setChangeMap({
+                    detectionId: d.id,
+                    url: `${orgApi(slug)}/detections/${d.id}/change-raster`,
+                    corners: d.changeMap.corners,
+                    legend: d.changeMap.legend,
+                    label: d.baseline && d.comparison ? `${formatDate(d.baseline.observedAt, timeZone)} → ${formatDate(d.comparison.observedAt, timeZone)}` : "",
+                  });
                 }}
               />
             ) : selAoi ? (
@@ -619,10 +651,7 @@ export function MapWorkspace(props: WorkspaceProps) {
                 detections={detections}
                 activeObservationId={active?.id ?? null}
                 onLoaded={(_a, obs) => setTimeline(obs)}
-                onShowObservation={(o) => {
-                  setCompare(null);
-                  setActive(o);
-                }}
+                onShowObservation={showObservation}
                 onSelectDetection={selectDetection}
                 onEditBoundary={(aoi) => {
                   const g = aoi.geometry;
@@ -634,8 +663,7 @@ export function MapWorkspace(props: WorkspaceProps) {
                 onChanged={refreshAois}
                 onClose={() => {
                   setSelAoi(null);
-                  setActive(null);
-                  setCompare(null);
+                  showObservation(null);
                 }}
               />
             ) : null}

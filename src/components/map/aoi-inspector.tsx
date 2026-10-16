@@ -76,11 +76,14 @@ export function AoiInspector({
   }, [slug, aoiId, reload]);
 
   const ndvi = useMemo(() => (obs ?? []).filter((o) => o.kind === "ndvi"), [obs]);
+  const ndmi = useMemo(() => (obs ?? []).filter((o) => o.kind === "ndmi"), [obs]);
+  const [chartKind, setChartKind] = useState<"ndvi" | "ndmi">("ndvi");
+  const chartObs = chartKind === "ndmi" && ndmi.length ? ndmi : ndvi;
   const latestValid = useMemo(() => (obs ?? []).find((o) => o.status === "valid"), [obs]);
   const latestNdvi = ndvi.find((o) => o.status === "valid");
   const latestAcquired = assets?.[0]?.asset.acquiredAt ?? null;
 
-  const series: SeriesPoint[] = ndvi.map((o) => ({
+  const series: SeriesPoint[] = chartObs.map((o) => ({
     id: o.id,
     t: Date.parse(o.observedAt),
     status: o.status,
@@ -189,17 +192,34 @@ export function AoiInspector({
       ) : null}
 
       {ndvi.length > 0 ? (
-        <SeriesChart
-          title="NDVI mean over time (band: p10–p90) · daily precipitation"
-          points={series}
-          precip={precip}
-          activeId={activeObservationId}
-          timeZone={timeZone}
-          onSelect={(id) => {
-            const o = ndvi.find((x) => x.id === id);
-            if (o && o.status === "valid") onShowObservation(o, obs ?? []);
-          }}
-        />
+        <div className="flex flex-col gap-1.5">
+          {ndmi.length > 0 ? (
+            <div className="flex overflow-hidden self-start rounded-[3px] border border-bone-50/15 text-[0.6875rem]" role="group" aria-label="Index shown in the chart">
+              {(["ndvi", "ndmi"] as const).map((k) => (
+                <button key={k} onClick={() => setChartKind(k)} aria-pressed={chartKind === k} className={chartKind === k ? "bg-bone-50 px-2 py-0.5 text-ink-900" : "px-2 py-0.5 text-bone-50/70"}>
+                  {k === "ndvi" ? "NDVI (vigour)" : "NDMI (canopy moisture)"}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <SeriesChart
+            title={
+              chartKind === "ndmi" && ndmi.length
+                ? "NDMI mean over time (band: p10–p90) · daily precipitation — canopy water content, not soil moisture"
+                : "NDVI mean over time (band: p10–p90) · daily precipitation"
+            }
+            points={series}
+            precip={precip}
+            yDomain={chartKind === "ndmi" && ndmi.length ? [-0.5, 0.7] : undefined}
+            color={chartKind === "ndmi" && ndmi.length ? "#c98500" : undefined}
+            activeId={activeObservationId}
+            timeZone={timeZone}
+            onSelect={(id) => {
+              const o = chartObs.find((x) => x.id === id);
+              if (o && o.status === "valid") onShowObservation(o, obs ?? []);
+            }}
+          />
+        </div>
       ) : null}
 
       <section aria-label="Imagery">
@@ -216,7 +236,7 @@ export function AoiInspector({
         ) : null}
         <ul className="flex max-h-72 flex-col overflow-y-auto">
           {(assets ?? []).map((a) => {
-            const KIND_PREF = ["ndvi", "s1_water", "ndwi", "landcover"];
+            const KIND_PREF = ["ndvi", "ndmi", "s1_water", "ndwi", "landcover"];
             const o = (obs ?? [])
               .filter((x) => x.asset.id === a.asset.id && x.hasRaster && x.status === "valid")
               .sort((p, q) => KIND_PREF.indexOf(p.kind) - KIND_PREF.indexOf(q.kind))[0];

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { detectionColor } from "@/components/map/legend";
+import { DetectionSwatch } from "@/components/map/legend";
 import { Badge, EmptyState, EVIDENCE_TONE, PageHeader, Panel, Table, td, th, VERIFICATION_TONE } from "@/components/platform/ui";
 import { formatDate } from "@/lib/format";
 import { formatArea } from "@/lib/geo";
@@ -57,7 +57,7 @@ export default async function DetectionsPage(props: PageProps<"/app/[org]/detect
                 return (
                   <tr key={p.id}>
                     <td className={td}>
-                      <span aria-hidden="true" className="mr-2 inline-block size-2 rounded-[1px]" style={{ background: detectionColor(p.type) }} />
+                      <span className="mr-2 inline-flex align-middle"><DetectionSwatch type={p.type} /></span>
                       <Link className="font-medium hover:underline" href={`/app/${org}/map?detection=${p.id}`}>{p.title}</Link>
                       <span className="block text-[0.75rem] text-bone-50/45">{p.aoi_name} · {p.model}</span>
                     </td>
