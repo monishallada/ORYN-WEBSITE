@@ -148,11 +148,11 @@ export const ANALYTICS = {
   },
   "ndvi-anomaly": {
     id: "ndvi-anomaly",
-    version: "1.0.0",
+    version: "1.1.0",
     name: "Vegetation anomaly vs. own baseline",
     resultClass: "deterministic_calculation",
     description:
-      "Standard score of the latest AOI mean NDVI against the AOI's own prior valid observations from the same sensor family within ±30 days of the same day of year (or, if fewer than 3 exist, the previous 90 days).",
+      "Standard score of the latest AOI mean NDVI against the AOI's own prior valid observations from the same sensor family within ±30 days of the same time of year in earlier years (circular, so late December and early January are the same season), or, if fewer than 3 such dates exist, the previous 90 days. Observations from the same acquisition date (neighbouring tiles of one pass) count as one baseline sample, and the observation's own pass is never part of its baseline.",
     inputContract: { inputs: "AOI NDVI observation history" },
     outputSchema: { metrics: ["z_score", "baseline_mean", "baseline_std", "baseline_n", "baseline_window"] },
     limitations: [
