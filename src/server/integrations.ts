@@ -27,6 +27,9 @@ export const GATED_INTEGRATIONS = {
   gdelt: { label: "GDELT news search", verify: "npm run oryn:verify -- gdelt" },
   "nasa-hls": { label: "NASA HLS image reads (Earthdata)", verify: "npm run oryn:verify -- nasa-hls" },
   "ai-summaries": { label: "AI report summaries (Anthropic)", verify: "npm run oryn:verify -- ai-summaries" },
+  // Keyless public feeds added after the audit: verified from a developer machine, not yet from a deployment.
+  "usgs-earthquakes": { label: "USGS earthquake layer", verify: "npm run oryn:verify -- usgs-earthquakes" },
+  "nifc-wildfire-perimeters": { label: "NIFC wildfire perimeter layer", verify: "npm run oryn:verify -- nifc-wildfire-perimeters" },
 } as const;
 
 export type GatedIntegration = keyof typeof GATED_INTEGRATIONS;

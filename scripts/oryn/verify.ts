@@ -11,8 +11,11 @@
  *   npm run oryn:verify -- nasa-hls               HLS search + authenticated read of one file header
  *   npm run oryn:verify -- email --to ops@example.org   sends ONE test message to that address
  *   npm run oryn:verify -- ai-summaries           one tiny request (synthetic text, no tenant data)
+ *   npm run oryn:verify -- usgs-earthquakes       fetch and validate the USGS M2.5+ 30-day feed
+ *   npm run oryn:verify -- nifc-wildfire-perimeters   fetch and validate current WFIGS perimeters
  *
- * Gated integrations (email, gdelt, nasa-hls, ai-summaries) stay off in
+ * Gated integrations (email, gdelt, nasa-hls, ai-summaries, and the public
+ * event layers) stay off in
  * production until they pass here AND are added to ORYN_VERIFIED_INTEGRATIONS.
  */
 import { loadEnvConfig } from "@next/env";
@@ -183,8 +186,19 @@ async function main() {
         break;
       }
 
+      case "usgs-earthquakes":
+      case "nifc-wildfire-perimeters": {
+        const { publicEvents } = await import("@/server/public-events/service");
+        // The gate is what this command verifies, so bypass it for this one call.
+        const r = await publicEvents(target, { bbox: [-180, -90, 180, 90], days: 30 }, { production: false });
+        if (!r || r.feed.state === "unavailable") return fail(r?.feed.message ?? "unknown layer");
+        ok(`${r.layer.name}: ${r.total} records validated (state ${r.feed.state}${r.feed.generatedAt ? `, generated ${r.feed.generatedAt}` : ""})`);
+        console.log(`  i Then add "${target}" to ORYN_VERIFIED_INTEGRATIONS for the web service.`);
+        break;
+      }
+
       default:
-        fail("Usage: npm run oryn:verify -- config|database|storage|providers|gdelt|nasa-hls|email --to <addr>|ai-summaries");
+        fail("Usage: npm run oryn:verify -- config|database|storage|providers|gdelt|nasa-hls|email --to <addr>|ai-summaries|usgs-earthquakes|nifc-wildfire-perimeters");
     }
   } finally {
     await closeDb();

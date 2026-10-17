@@ -27,7 +27,7 @@ const TABLES = [
   "notifications", "alert_events", "alerts", "alert_rules",
   "aoi_news_matches", "news_articles", "external_events", "weather_records",
   "reference_features", "reference_layers", "uploads", "exports", "reports",
-  "notes", "detections", "observations", "processing_runs", "jobs",
+  "saved_scenes", "notes", "detections", "observations", "processing_runs", "jobs",
   "aoi_assets", "source_assets", "provider_sync_runs", "provider_status", "provider_request_slots", "worker_heartbeats", "aoi_grants", "aois",
   "api_keys", "invitations", "memberships", "organizations", "platform_admins", "account_controls",
   "auth_session", "auth_account", "auth_verification", "auth_rate_limit", "auth_user",

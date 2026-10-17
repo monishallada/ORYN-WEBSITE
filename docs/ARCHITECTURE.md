@@ -20,6 +20,7 @@
                                                                            ▼
                          Earth Search · Planetary Computer · CDSE · NASA CMR · NWS · Open-Meteo · GDELT
                          Census TIGERweb · Census Geocoder · Overpass (OSM) · USGS / FEMA / OpenFreeMap tiles
+                         USGS earthquakes · NIFC WFIGS perimeters (public event layers, fetched by the web app)
 ```
 
 * **Server code** lives in `src/server` and is framework-independent where possible (the worker and tests import the same modules as the web app).
@@ -55,6 +56,7 @@
 | `weather_records`, `external_events`, `news_articles`, `aoi_news_matches` | Context: observations / forecasts / model estimates, official warnings, news claims |
 | `reference_layers`, `reference_features`, `uploads` | Imported reference data and uploaded files |
 | `reports`, `exports`, `notes`, `audit_events` | Outputs, analyst notes, append-only audit trail |
+| `saved_scenes` | Saved map views (view state only; `private` scenes visible to their author by RLS) |
 
 ## Workflows
 
@@ -118,3 +120,29 @@ Distinct clocks are stored and shown separately: **acquired** (sensor time, `sou
 ## Provenance
 
 Every result can be traced: detection → baseline and comparison observations → processing runs (model id/version, parameters, software version) → source assets (provider, collection, item id, STAC URL, licence, attribution). Reports freeze a snapshot of the evidence they cite.
+
+## Map engine
+
+The map workspace (`src/components/map/`) is one engine with a clear boundary:
+
+* **Renderer — MapLibre GL** (`map-view.tsx`). It draws the 2D analytical map and, optionally, a 3D globe (MapLibre's built-in globe projection; it flattens as you zoom in). Drawing and boundary editing (terra-draw) always switch to the flat map. Analytical rasters are placed by their four real corners (image sources), which keeps them exact on the UTM grid they were computed on.
+* **Workspace state — `workspace.tsx`** owns selection, layers, dates, filters and scenes, and talks only to ORYN's permission-checked APIs. The browser never fetches a provider directly.
+* **Inspectors** — `aoi-inspector.tsx`, `detection-inspector.tsx`, `event-inspector.tsx` — show source, observation time vs. retrieval/processing time, units, quality and limitations, and the actions the user's role allows.
+
+Why not God's Eye View's renderer: God's Eye View (MIT) renders with CesiumJS; 319 of its source files import Cesium directly and its layers draw into the Cesium viewer. Adopting it would have meant losing terra-draw (no Cesium adapter), approximating four-corner rasters with north-up rectangles, and shipping a second application. ORYN instead adopted its engine *patterns* and ported small modules (see `THIRD_PARTY_NOTICES.md`): the honest feed-state model, all-or-nothing record validation, the cached/serve-stale provider pattern, and entity cards.
+
+### Public event layers
+
+`src/lib/public-events.ts` (descriptors, types, feed states) · `src/server/public-events/` (normalization, cache) · `GET /api/v1/orgs/[org]/public-events/[layer]?bbox=&days=`.
+
+* Keyless public feeds: USGS earthquakes (M2.5+, past 30 days, worldwide) and NIFC WFIGS current wildfire perimeters (US).
+* Fixed upstream URLs; callers pick a layer id, never a URL. Members only (no open proxy). Rate-limited per user.
+* One snapshot per layer per web process, refreshed at most once per cache period (5 min / 15 min) with a single shared in-flight request; a failed or malformed refresh keeps the last good snapshot and marks it **stale**; with nothing to show the feed is **unavailable** (never an empty "current" layer). A missing timestamp stays unknown.
+* They are context, not findings: drawn in neutral ink (rings, hatching) so ORYN's own findings keep the categorical colours, never written to alerts automatically. A user can record one on a nearby area as a note, labelled as a public record.
+* Gated integrations (`usgs-earthquakes`, `nifc-wildfire-perimeters`): off in production until verified in that deployment.
+
+### Saved scenes
+
+`saved_scenes` (migration 0008) · `src/lib/scenes.ts` (schema, presets) · `src/server/scenes/service.ts` · `/api/v1/orgs/[org]/scenes`.
+
+A scene stores view state only: camera, projection, basemap and overlays, public event layers, selected area, the displayed image (kind + exact acquisition instant), chart index and change filters. It never stores data or grants access: on restore every record is fetched again through the normal APIs; the server removes an area the viewer cannot see before returning a scene, and a saved image is restored only from that area's own observation list (or reported as no longer available). Private scenes are hidden by a restrictive RLS policy. Sharing with the organization needs `notes.write`; deleting needs authorship or `org.manage`. Presets only switch existing functionality (no fabricated places or datasets).

@@ -29,6 +29,8 @@ export function AoiInspector({
   onChanged,
   onClose,
   onLoaded,
+  chartKind: chartKindProp,
+  onChartKindChange,
 }: {
   slug: string;
   aoiId: string;
@@ -42,6 +44,9 @@ export function AoiInspector({
   onChanged: () => void;
   onClose: () => void;
   onLoaded?: (aoi: Aoi, observations: Observation[]) => void;
+  /** Index shown in the trend chart; controlled by the workspace when given (saved scenes restore it). */
+  chartKind?: "ndvi" | "ndmi";
+  onChartKindChange?: (k: "ndvi" | "ndmi") => void;
 }) {
   const [aoi, setAoi] = useState<Aoi | null>(null);
   const [obs, setObs] = useState<Observation[] | null>(null);
@@ -77,7 +82,9 @@ export function AoiInspector({
 
   const ndvi = useMemo(() => (obs ?? []).filter((o) => o.kind === "ndvi"), [obs]);
   const ndmi = useMemo(() => (obs ?? []).filter((o) => o.kind === "ndmi"), [obs]);
-  const [chartKind, setChartKind] = useState<"ndvi" | "ndmi">("ndvi");
+  const [chartKindState, setChartKindState] = useState<"ndvi" | "ndmi">("ndvi");
+  const chartKind = chartKindProp ?? chartKindState;
+  const setChartKind = onChartKindChange ?? setChartKindState;
   const chartObs = chartKind === "ndmi" && ndmi.length ? ndmi : ndvi;
   const latestValid = useMemo(() => (obs ?? []).find((o) => o.status === "valid"), [obs]);
   const latestNdvi = ndvi.find((o) => o.status === "valid");
