@@ -58,6 +58,8 @@
 | `reports`, `exports`, `notes`, `audit_events` | Outputs, analyst notes, append-only audit trail |
 | `saved_scenes` | Saved map views (view state only; `private` scenes visible to their author by RLS) |
 
+The intelligence globe adds no tables: orbital elements and camera lists are public reference data cached in the web process.
+
 ## Workflows
 
 ### A — Agricultural monitoring
@@ -121,15 +123,31 @@ Distinct clocks are stored and shown separately: **acquired** (sensor time, `sou
 
 Every result can be traced: detection → baseline and comparison observations → processing runs (model id/version, parameters, software version) → source assets (provider, collection, item id, STAC URL, licence, attribution). Reports freeze a snapshot of the evidence they cite.
 
-## Map engine
+## Map engines
 
-The map workspace (`src/components/map/`) is one engine with a clear boundary:
+ORYN has two views over one data model, one permission system, and one set of APIs:
 
-* **Renderer — MapLibre GL** (`map-view.tsx`). It draws the 2D analytical map and, optionally, a 3D globe (MapLibre's built-in globe projection; it flattens as you zoom in). Drawing and boundary editing (terra-draw) always switch to the flat map. Analytical rasters are placed by their four real corners (image sources), which keeps them exact on the UTM grid they were computed on.
-* **Workspace state — `workspace.tsx`** owns selection, layers, dates, filters and scenes, and talks only to ORYN's permission-checked APIs. The browser never fetches a provider directly.
-* **Inspectors** — `aoi-inspector.tsx`, `detection-inspector.tsx`, `event-inspector.tsx` — show source, observation time vs. retrieval/processing time, units, quality and limitations, and the actions the user's role allows.
+* **2D map workspace** (`src/components/map/`, MapLibre GL) — the analytical map: field drawing and editing (terra-draw), satellite rasters placed by their four real UTM corners, change maps, review, notes. Optional globe projection for a quick overview.
+* **3D intelligence globe** (`src/components/intel/`, CesiumJS engine, `/app/[org]/intel`) — global context: imaging satellites moving on computed orbits with their swaths, public events in time, cameras with live video, ORYN areas and findings, a timeline, and search. One click switches between the views at the same place (`?at=`).
 
-Why not God's Eye View's renderer: God's Eye View (MIT) renders with CesiumJS; 319 of its source files import Cesium directly and its layers draw into the Cesium viewer. Adopting it would have meant losing terra-draw (no Cesium adapter), approximating four-corner rasters with north-up rectangles, and shipping a second application. ORYN instead adopted its engine *patterns* and ported small modules (see `THIRD_PARTY_NOTICES.md`): the honest feed-state model, all-or-nothing record validation, the cached/serve-stale provider pattern, and entity cards.
+**Why both (decision 2026-10-17).** Option A (MapLibre only) cannot animate tracks against a time-dynamic clock, light the globe for the shown time, or render orbits in 3D. Option B (CesiumJS for 3D, MapLibre kept for fields) delivers a genuine 3D experience without breaking field editing or exact raster placement, which Cesium cannot do as-is (terra-draw has no Cesium adapter; Cesium imagery layers are north-up rectangles). Cesium is loaded only on the globe page (~1.2 MB gzipped, lazy). It uses `@cesium/engine` alone — no Widgets/knockout, no Cesium ion, no keys: base imagery is NASA GIBS Blue Marble and terrain is the ellipsoid.
+
+**Boundaries.** `globe-scene.ts` is the only file that touches Cesium; the React workspace drives it through a small API (set layers, select, fly, clock). Every record comes from `/api/v1/orgs/[org]/…` routes that check membership and area access. Review, notes, alerts and reports stay in their existing workflows: globe cards link to them (findings → map workspace; events → “Add note” on an area). Nothing on the globe creates alerts.
+
+**Honesty rules** (enforced in code and tests): computed satellite positions are labelled as model output with their elements' epoch; overpasses are “geometric”, never “will image”; wildfire perimeters (a current snapshot) are hidden when the timeline looks back; earthquakes are filtered by event time; camera stills carry their capture time (HTTP `Last-Modified`) and are never called live; live video is played straight from the operator and its stream is health-checked server-side; no computer vision runs (`analytics.status = "not_enabled"`).
+
+**CSP.** The globe page alone adds `'wasm-unsafe-eval'` (WebAssembly compilation only — Cesium's bundled meshoptimizer decoder), plus image/connect hosts for GIBS and camera media hosts, and `media-src blob:` for hls.js. No `'unsafe-eval'`.
+
+### Intelligence sources
+
+| Layer | Source | Kind | Route | Gate |
+| --- | --- | --- | --- | --- |
+| Imaging satellites | CelesTrak GP elements → SGP4 (server) | model output | `intel/satellites`, `intel/satellites/passes` | `celestrak` |
+| Traffic cameras | Caltrans CWWP2 (12 districts) | camera | `intel/cameras`, `intel/cameras/[id]/health` | `caltrans-cctv` |
+| Earthquakes, wildfire perimeters | USGS, NIFC (see below) | measurement / official report | `public-events/[layer]` | `usgs-earthquakes`, `nifc-wildfire-perimeters` |
+| Base / daily imagery | NASA GIBS (browser-direct tiles) | imagery | — | — |
+
+**Cameras and video, architecture for what comes next.** `src/lib/intel/cameras.ts` defines the registry contract (location, still, video, provider terms, media hosts) and `CameraAnalyticsStatus`. A future detector would run server-side on frames the operator permits processing of, write results with model/version/confidence like any other ORYN analytic, and flip `analytics.status`; until then the UI says no computer vision runs.
 
 ### Public event layers
 

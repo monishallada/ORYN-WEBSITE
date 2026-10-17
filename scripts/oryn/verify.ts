@@ -13,6 +13,8 @@
  *   npm run oryn:verify -- ai-summaries           one tiny request (synthetic text, no tenant data)
  *   npm run oryn:verify -- usgs-earthquakes       fetch and validate the USGS M2.5+ 30-day feed
  *   npm run oryn:verify -- nifc-wildfire-perimeters   fetch and validate current WFIGS perimeters
+ *   npm run oryn:verify -- celestrak              fetch CelesTrak elements once and propagate every imaging satellite
+ *   npm run oryn:verify -- caltrans-cctv          download and validate the 12 Caltrans camera lists (plays no video)
  *
  * Gated integrations (email, gdelt, nasa-hls, ai-summaries, and the public
  * event layers) stay off in
@@ -197,8 +199,32 @@ async function main() {
         break;
       }
 
+      case "celestrak": {
+        const { satelliteTracks } = await import("@/server/intel/satellites");
+        // One CelesTrak download (two small queries); the gate is what this verifies.
+        const r = await satelliteTracks(new Date(), { production: false, halfWindowMinutes: 1 });
+        if (r.feed.state === "unavailable") return fail(r.feed.message ?? "unavailable");
+        const ok_ = r.satellites.filter((s) => s.track);
+        ok(`${ok_.length}/${r.satellites.length} imaging satellites propagated (${ok_.map((s) => `${s.name} ${s.track!.elementsAgeHours} h`).join(", ")})`);
+        if (r.feed.message) console.log(`  ! ${r.feed.message}`);
+        console.log('  i Then add "celestrak" to ORYN_VERIFIED_INTEGRATIONS for the web service.');
+        break;
+      }
+
+      case "caltrans-cctv": {
+        const { cameras } = await import("@/server/intel/cameras");
+        // Downloads the 12 district lists once (about 10 MB) and validates them; plays no video.
+        const r = await cameras([-125, 32, -114, 42.1], { production: false });
+        if (r.feed.state === "unavailable") return fail(r.feed.message ?? "unavailable");
+        const withVideo = r.cameras.filter((c) => c.video).length;
+        ok(`${r.total} in-service cameras listed (${withVideo} with live HLS video in the first ${r.cameras.length}); feed ${r.feed.state}`);
+        if (r.feed.message) console.log(`  ! ${r.feed.message}`);
+        console.log('  i Then add "caltrans-cctv" to ORYN_VERIFIED_INTEGRATIONS for the web service.');
+        break;
+      }
+
       default:
-        fail("Usage: npm run oryn:verify -- config|database|storage|providers|gdelt|nasa-hls|email --to <addr>|ai-summaries|usgs-earthquakes|nifc-wildfire-perimeters");
+        fail("Usage: npm run oryn:verify -- config|database|storage|providers|gdelt|nasa-hls|email --to <addr>|ai-summaries|usgs-earthquakes|nifc-wildfire-perimeters|celestrak|caltrans-cctv");
     }
   } finally {
     await closeDb();

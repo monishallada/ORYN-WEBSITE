@@ -30,6 +30,8 @@ export const GATED_INTEGRATIONS = {
   // Keyless public feeds added after the audit: verified from a developer machine, not yet from a deployment.
   "usgs-earthquakes": { label: "USGS earthquake layer", verify: "npm run oryn:verify -- usgs-earthquakes" },
   "nifc-wildfire-perimeters": { label: "NIFC wildfire perimeter layer", verify: "npm run oryn:verify -- nifc-wildfire-perimeters" },
+  celestrak: { label: "Imaging-satellite tracks (CelesTrak orbital elements)", verify: "npm run oryn:verify -- celestrak" },
+  "caltrans-cctv": { label: "Caltrans traffic cameras", verify: "npm run oryn:verify -- caltrans-cctv" },
 } as const;
 
 export type GatedIntegration = keyof typeof GATED_INTEGRATIONS;

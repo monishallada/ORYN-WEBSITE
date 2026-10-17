@@ -1,9 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Map as MlMap } from "maplibre-gl";
-import { Circle, Layers, ListFilter, MapPin, Pentagon, Search, Spline, Square, X } from "lucide-react";
+import { Circle, Globe2, Layers, ListFilter, MapPin, Pentagon, Search, Spline, Square, X } from "lucide-react";
 import { AoiInspector, type InspectorPerms } from "@/components/map/aoi-inspector";
 import { api, ApiError, orgApi } from "@/components/map/api";
 import { DetectionInspector } from "@/components/map/detection-inspector";
@@ -53,6 +54,8 @@ export type WorkspaceProps = {
   overlays: MapOverlay[];
   initialAois: FC<AoiFeatureProps>;
   initialBounds: [number, number, number, number] | null;
+  /** Explicit starting view (e.g. coming from the 3D globe); wins over initialBounds. */
+  initialView?: { center: [number, number]; zoom: number } | null;
   focus: { aoi?: string; detection?: string; obs?: string; draw?: boolean };
 };
 
@@ -671,6 +674,7 @@ export function MapWorkspace(props: WorkspaceProps) {
           raster={primaryRaster}
           references={refData}
           initialBounds={props.initialBounds}
+          initialView={props.initialView ?? null}
           drawMode={draft ? null : drawMode}
           editGeometry={edit?.geom ?? null}
           onDrawFinish={(g) => setDraft(g)}
@@ -741,9 +745,17 @@ export function MapWorkspace(props: WorkspaceProps) {
 
         {/* Map chrome */}
         <div className="absolute left-3 top-3 z-10 flex flex-col gap-2">
-          <Button size="sm" className="bg-ink-950/90 lg:hidden" onClick={() => setLeftOpen((o) => !o)} aria-expanded={leftOpen}>
-            <Layers className="size-3.5" aria-hidden="true" /> Panel
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" className="bg-ink-950/90 lg:hidden" onClick={() => setLeftOpen((o) => !o)} aria-expanded={leftOpen}>
+              <Layers className="size-3.5" aria-hidden="true" /> Panel
+            </Button>
+            <Link
+              href={`/app/${slug}/intel${view ? `?at=${view.center[0].toFixed(4)},${view.center[1].toFixed(4)},${Math.round(35_000_000 / 2 ** view.zoom) + 2_000}` : ""}`}
+              className="inline-flex items-center gap-1.5 rounded-[3px] border border-bone-50/20 bg-ink-950/90 px-2.5 py-1 text-[0.75rem] hover:border-bone-50/50"
+            >
+              <Globe2 className="size-3.5" aria-hidden="true" /> 3D intelligence globe
+            </Link>
+          </div>
           {drawMode && !draft ? (
             <div className="max-w-xs rounded-[3px] border border-signal/40 bg-ink-950/95 px-3 py-2 text-[0.75rem]">
               {drawMode === "polygon" ? "Click to add vertices; click the first point (or press Enter) to finish." : drawMode === "rectangle" ? "Click two opposite corners." : drawMode === "point" ? "Click the location to monitor." : "Click along the corridor; double-click to finish."}

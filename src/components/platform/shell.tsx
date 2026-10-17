@@ -10,6 +10,7 @@ import {
   Cpu,
   Database,
   FileText,
+  Globe2,
   LayoutDashboard,
   LogOut,
   Map as MapIcon,
@@ -30,6 +31,7 @@ export type OrgOption = { slug: string; name: string; role: string };
 const ICONS = {
   overview: LayoutDashboard,
   map: MapIcon,
+  globe: Globe2,
   areas: Shapes,
   review: ClipboardCheck,
   alerts: Siren,
@@ -70,7 +72,7 @@ export function PlatformShell({
   }
   const base = `/app/${orgSlug}`;
   const isActive = (href: string) => (href === base ? pathname === base : pathname === href || pathname.startsWith(href + "/"));
-  const fullBleed = pathname === `${base}/map`;
+  const fullBleed = pathname === `${base}/map` || pathname === `${base}/intel`;
 
   return (
     <div className="flex h-[100svh] overflow-hidden bg-ink-900 text-bone-50">

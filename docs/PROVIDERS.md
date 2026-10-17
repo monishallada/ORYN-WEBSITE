@@ -163,6 +163,13 @@ Map context only (`src/server/public-events/`); fetched by the **web** service o
 - **Credentials:** none. **Commercial use:** allowed. **Gated:** off in production until `node dist/verify.mjs <id>` passes and the id is added to the web service's `ORYN_VERIFIED_INTEGRATIONS`.
 - Not used (licence or key): NASA FIRMS (needs a MAP_KEY), Esri World Imagery (Esri terms), Cesium ion / Google 3D tiles (keys, non-commercial or metered).
 
+### Intelligence globe — CelesTrak (`celestrak`), Caltrans CCTV (`caltrans-cctv`), NASA GIBS
+
+- **CelesTrak GP elements** — `https://celestrak.org/NORAD/elements/gp.php?GROUP=resource&FORMAT=json` and `?NAME=SENTINEL-1&FORMAT=json` (two small requests). CelesTrak updates every 2 hours and temporarily blocks clients that download more often (HTTP 403); ORYN downloads at most once per 2 hours, waits 30 minutes after a failure, and keeps serving the last good elements marked stale. Used only for the satellites behind ORYN's imagery (Sentinel-2A/2B/2C, Landsat 8/9, Sentinel-1A/1C/1D). Positions and overpasses are computed server-side (satellite.js SGP4); browsers never receive the raw elements. No formal licence is published; attribution “CelesTrak”.
+- **Caltrans CWWP2 CCTV** — `https://cwwp2.dot.ca.gov/data/d{N}/cctv/cctvStatusD{NN}.json`, N = 1–12 (~10 MB in total). Refreshed at most every 12 hours on demand. In-service cameras only; media URLs must be on `cwwp2.dot.ca.gov` (stills) or `wzmedia.dot.ca.gov` (HLS). Stills refresh every ~2 minutes and carry their capture time in `Last-Modified`; many cameras stream live H.264 HLS (720p) with CORS open. Some listed streams are offline (playlist 404) — the server-side health check reports that. Caltrans states the files “are available for integration into your application … There is no charge for the use of this data”, and that it neither retains nor archives footage. ORYN never relays or records video (no egress cost, nothing stored).
+- **NASA GIBS** — Blue Marble (base) and NOAA-20 VIIRS corrected reflectance (daily, by UTC date) WMTS tiles, loaded by the browser. Keyless; NASA imagery is free to use with credit.
+- Not used: Google Photorealistic 3D Tiles / Cesium ion (keys, metered or non-commercial), Esri World Imagery (Esri terms), OpenSky (non-commercial), AISStream (key), NCDOT cameras (developer key), NYC DOT / TfL (agreements), DelDOT and Maryland CHART (no published reuse terms), Iowa DOT (site terms limit use to non-commercial; pending clarification).
+
 ## Adding a provider
 
 1. Implement the relevant interface (`ImageryProvider` for catalogs; plain functions returning `WeatherRecord` / `WeatherWarning` / `NewsArticle` / `ReferenceFeature` otherwise) in `src/server/providers/<kind>/`.
