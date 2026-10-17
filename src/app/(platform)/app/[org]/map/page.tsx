@@ -18,6 +18,11 @@ export default async function MapPage(props: PageProps<"/app/[org]/map">) {
     return r?.b ?? null;
   });
   const str = (v: unknown) => (typeof v === "string" && /^[0-9a-f-]{36}$/.test(v) ? v : undefined);
+  const at = typeof sp.at === "string" ? sp.at.split(",").map(Number) : [];
+  const initialView =
+    at.length === 3 && at.every(Number.isFinite) && Math.abs(at[0]!) <= 180 && Math.abs(at[1]!) <= 85 && at[2]! >= 0 && at[2]! <= 22
+      ? { center: [at[0]!, at[1]!] as [number, number], zoom: at[2]! }
+      : null;
   return (
     <MapWorkspace
       slug={org}
@@ -34,6 +39,7 @@ export default async function MapPage(props: PageProps<"/app/[org]/map">) {
       overlays={mapOverlays()}
       initialAois={aois}
       initialBounds={extent}
+      initialView={initialView}
       focus={{ aoi: str(sp.aoi), detection: str(sp.detection), obs: str(sp.obs), draw: sp.draw === "1" }}
     />
   );

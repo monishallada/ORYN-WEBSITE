@@ -52,6 +52,7 @@ type Props = {
   /** Organization reference layers to draw (permits, parcels, OSM infrastructure). */
   references?: { id: string; data: GeoJSON.FeatureCollection }[];
   initialBounds?: [number, number, number, number] | null;
+  initialView?: { center: [number, number]; zoom: number } | null;
   interactive?: boolean;
   /** "globe" shows a 3D globe at low zoom (MapLibre's built-in projection; it flattens as you zoom in). */
   projection?: "mercator" | "globe";
@@ -319,8 +320,9 @@ export const MapView = forwardRef<MapHandle, Props>(function MapView(props, ref)
     const map = new MlMap({
       container: container.current,
       style: baseStyle(p.basemap),
-      bounds: (p.initialBounds ?? [-125, 24, -66, 50]) as LngLatBoundsLike,
-      fitBoundsOptions: { padding: 40 },
+      ...(p.initialView
+        ? { center: p.initialView.center, zoom: p.initialView.zoom }
+        : { bounds: (p.initialBounds ?? [-125, 24, -66, 50]) as LngLatBoundsLike, fitBoundsOptions: { padding: 40 } }),
       attributionControl: false,
       interactive: p.interactive !== false,
       maxPitch: 0,

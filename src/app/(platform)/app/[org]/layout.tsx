@@ -31,6 +31,7 @@ export default async function OrgLayout(props: LayoutProps<"/app/[org]">) {
   const nav: NavItem[] = [
     { href: base, label: isAg ? "Farm overview" : isMunicipal ? "Municipal overview" : "Overview", icon: "overview" },
     { href: `${base}/map`, label: "Map workspace", icon: "map" },
+    { href: `${base}/intel`, label: "Intelligence globe", icon: "globe" },
     { href: `${base}/areas`, label: isAg ? "Fields & farms" : "Areas of interest", icon: "areas" },
     { href: `${base}/detections`, label: isMunicipal ? "Inspection queue" : "Change review", icon: "review", badge: counts.unreviewed },
     { href: `${base}/alerts`, label: "Alerts", icon: "alerts", badge: counts.open_alerts },

@@ -185,6 +185,8 @@ Integrations whose live behaviour was never verified stay **off in production** 
 | `ai-summaries` | `node dist/verify.mjs ai-summaries` | Credentials and model access (synthetic text only — no tenant data) |
 | `usgs-earthquakes` | `node dist/verify.mjs usgs-earthquakes` | The USGS M2.5+ feed downloads and validates from this deployment. Add the id to the **web** service's `ORYN_VERIFIED_INTEGRATIONS` (the web app fetches it) |
 | `nifc-wildfire-perimeters` | `node dist/verify.mjs nifc-wildfire-perimeters` | WFIGS current perimeters download (all pages) and validate. Add the id to the **web** service's variable |
+| `celestrak` | `node dist/verify.mjs celestrak` | One CelesTrak download (two small requests; respect its 2-hour rule — do not repeat it in a loop) and SGP4 propagation of every imaging satellite. Add the id to the **web** service's variable |
+| `caltrans-cctv` | `node dist/verify.mjs caltrans-cctv` | The 12 Caltrans camera lists download (~10 MB) and validate; plays no video. Add the id to the **web** service's variable |
 
 Always verified at each release: `verify.mjs database` (role privileges, RLS on every tenant table, migration state), `verify.mjs storage` (write/read/delete; anonymous read refused; encryption header), `verify.mjs providers` (health probes of enabled providers).
 
