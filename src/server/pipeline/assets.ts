@@ -11,6 +11,15 @@
  *  - linkAndQueue: records the (aoi, asset) link and queues processing once;
  *    re-running is a no-op. Footprints covering too little of an AOI are
  *    linked as 'skipped' with the reason, so the history explains itself.
+ *    So is a second item of the SAME acquisition: providers publish one item
+ *    per granule and per tile, so one satellite pass can arrive as several
+ *    items (Sentinel-2 "_0"/"_1" granules seconds apart, or neighbouring UTM
+ *    tiles). When an item of the same satellite within ±2 minutes already
+ *    covers the whole area, the other is not processed again. Preference
+ *    within a batch: the tile in the area's own UTM zone (so later images
+ *    stay comparable on one grid), then higher coverage, then the earliest
+ *    item. Items covering only part of the area are all processed (there is
+ *    no mosaicking).
  */
 import { createHash } from "node:crypto";
 import { jsonb, type Tx } from "@/server/db/client";
@@ -21,6 +30,16 @@ import type { NormalizedAsset } from "@/server/providers/types";
 /** Bump when the set of analytics run per asset changes, so new work is queued for old assets. */
 export const PROCESSING_SET_VERSION = "1";
 export const MIN_COVERAGE_FRACTION = 0.05;
+/** Items of one satellite this close in time are the same acquisition (granules / tiles of one pass). */
+export const SAME_ACQUISITION_SECONDS = 120;
+/** An item covering at least this much of the area can stand for the whole acquisition. */
+export const FULL_COVERAGE_FRACTION = 0.98;
+
+/** EPSG of the WGS 84 / UTM zone containing a point. */
+export function utmEpsg(lon: number, lat: number): number {
+  const zone = Math.min(60, Math.max(1, Math.floor((lon + 180) / 6) + 1));
+  return (lat >= 0 ? 32600 : 32700) + zone;
+}
 
 export function assetMetadataHash(a: NormalizedAsset): string {
   const material = {
@@ -97,15 +116,49 @@ export async function linkAndQueue(
   let queued = 0;
   let skipped = 0;
   let alreadyKnown = 0;
-  for (const m of matches) {
+  if (matches.length === 0) return { queued, skipped, alreadyKnown };
+  const meta = new Map(
+    (
+      await tx<{ id: string; collection: string; platform: string | null; acquired_at: Date; epsg: number | null; external_id: string }[]>`
+        select id, collection, platform, acquired_at, epsg, external_id from source_assets where id = any(${[...new Set(matches.map((m) => m.asset_id))]}::uuid[])`
+    ).map((r) => [r.id, r]),
+  );
+  const native = new Map(
+    (
+      await tx<{ id: string; lon: number; lat: number }[]>`
+        select id, ST_X(ST_PointOnSurface(geom)) as lon, ST_Y(ST_PointOnSurface(geom)) as lat from aois where id = any(${[...new Set(matches.map((m) => m.aoi_id))]}::uuid[])`
+    ).map((r) => [r.id, utmEpsg(r.lon, r.lat)]),
+  );
+  // Within a batch, the preferred item of an acquisition is linked first and stands for it.
+  const ordered = [...matches].sort((a, b) => {
+    const ma = meta.get(a.asset_id)!;
+    const mb = meta.get(b.asset_id)!;
+    const na = ma.epsg === native.get(a.aoi_id) ? 0 : 1;
+    const nb = mb.epsg === native.get(b.aoi_id) ? 0 : 1;
+    return a.aoi_id.localeCompare(b.aoi_id) || na - nb || b.coverage - a.coverage || ma.acquired_at.getTime() - mb.acquired_at.getTime() || ma.external_id.localeCompare(mb.external_id);
+  });
+  for (const m of ordered) {
     const cloudy = m.cloud_cover !== null && m.cloud_cover > m.max_cloud_cover;
     const tooSmall = m.coverage < MIN_COVERAGE_FRACTION;
-    const status = cloudy || tooSmall ? "skipped" : "queued";
+    const a = meta.get(m.asset_id)!;
+    const [same] =
+      !cloudy && !tooSmall && a.platform
+        ? await tx<{ external_id: string }[]>`
+            select s.external_id from aoi_assets l join source_assets s on s.id = l.asset_id
+             where l.aoi_id = ${m.aoi_id} and l.asset_id <> ${m.asset_id} and l.status in ('queued', 'processed', 'unusable')
+               and l.coverage_fraction >= ${FULL_COVERAGE_FRACTION}
+               and s.collection = ${a.collection} and s.platform = ${a.platform}
+               and abs(extract(epoch from (s.acquired_at - ${a.acquired_at}::timestamptz))) <= ${SAME_ACQUISITION_SECONDS}
+             order by s.acquired_at limit 1`
+        : [];
+    const status = cloudy || tooSmall || same ? "skipped" : "queued";
     const reason = cloudy
       ? `Scene cloud cover ${m.cloud_cover?.toFixed(0)}% exceeds this area's limit of ${m.max_cloud_cover.toFixed(0)}%.`
       : tooSmall
         ? `The image footprint covers only ${(m.coverage * 100).toFixed(1)}% of this area.`
-        : null;
+        : same
+          ? `Same acquisition as ${same.external_id} (${a.platform}, another granule or tile of the same pass), which already covers the whole area; not processed twice.`
+          : null;
     const inserted = await tx`
       insert into aoi_assets (org_id, aoi_id, asset_id, coverage_fraction, status, status_reason)
       values (${m.org_id}, ${m.aoi_id}, ${m.asset_id}, ${Math.min(1, m.coverage)}, ${status}, ${reason})

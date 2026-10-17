@@ -372,3 +372,59 @@ describe("agriculture: within-field zones, NDMI, and analytics backfill", () => 
     expect((await ownerSql()`select count(*)::int as n from jobs where status = 'queued'`)[0]!.n).toBe(0);
   });
 });
+
+describe("one acquisition delivered as several items (granules, neighbouring tiles)", () => {
+  beforeEach(resetDb);
+  afterAll(closeTestDb);
+
+  async function ingestBatch(orgId: string, aoiId: string, assets: NormalizedAsset[]) {
+    return withSystem("test.ingest", async (tx) => {
+      const up = await upsertSourceAssets(tx, assets);
+      const m = await matchAssets(tx, up.map((u) => u.id), "earth-search:sentinel-2-l2a");
+      return linkAndQueue(tx, m.filter((x) => x.org_id === orgId && x.aoi_id === aoiId), { productId: "earth-search:sentinel-2-l2a", reason: "scheduled" });
+    });
+  }
+  const links = (aoiId: string) =>
+    ownerSql()<{ external_id: string; status: string; status_reason: string | null }[]>`
+      select s.external_id, l.status, l.status_reason from aoi_assets l join source_assets s on s.id = l.asset_id where l.aoi_id = ${aoiId} order by s.external_id`;
+  const t = new Date("2026-10-01T16:13:27Z");
+  const plus = (s: number) => new Date(t.getTime() + s * 1000);
+
+  it("processes one granule of a pass and records why the other was skipped", async () => {
+    const { org, aoiId } = await setupOrg();
+    const q = await ingestBatch(org.id, aoiId, [asset("S2B_X_0", t), asset("S2B_X_1", plus(7))]);
+    expect(q).toMatchObject({ queued: 1, skipped: 1 });
+    const l = await links(aoiId);
+    expect(l.map((x) => [x.external_id, x.status])).toEqual([["S2B_X_0", "queued"], ["S2B_X_1", "skipped"]]);
+    expect(l[1]!.status_reason).toMatch(/^Same acquisition as S2B_X_0 \(sentinel-2a, another granule or tile of the same pass\)/);
+  });
+
+  it("prefers the tile in the area's own UTM zone, whatever the order", async () => {
+    const { org, aoiId } = await setupOrg(); // AOI at −77.6°: UTM zone 18
+    const otherZone = { ...asset("S2B_17ZZZ", t), epsg: 32617, gridCode: "MGRS-17ZZZ" };
+    const ownZone = asset("S2B_18STE", plus(1));
+    await ingestBatch(org.id, aoiId, [otherZone, ownZone]);
+    expect((await links(aoiId)).map((x) => [x.external_id, x.status])).toEqual([["S2B_17ZZZ", "skipped"], ["S2B_18STE", "queued"]]);
+  });
+
+  it("keeps separate acquisitions: another satellite the same day, or the same satellite much later", async () => {
+    const { org, aoiId } = await setupOrg();
+    await ingestBatch(org.id, aoiId, [asset("S2B_A", t), { ...asset("S2A_B", plus(600)), platform: "sentinel-2b" }, asset("S2B_C", plus(3600))]);
+    expect((await links(aoiId)).every((x) => x.status === "queued")).toBe(true);
+  });
+
+  it("processes every granule when none covers the whole area (no mosaicking)", async () => {
+    const { org, aoiId } = await setupOrg(); // AOI: SQUARE(−77.6, 35.9, 0.01)
+    const west = { ...asset("S2B_W", t), footprint: SQUARE(-77.7, 35.8, 0.105) }; // ends at −77.595: half the AOI
+    const east = { ...asset("S2B_E", plus(7)), footprint: SQUARE(-77.595, 35.8, 0.3) };
+    await ingestBatch(org.id, aoiId, [west, east]);
+    expect((await links(aoiId)).map((x) => x.status)).toEqual(["queued", "queued"]);
+  });
+
+  it("skips a duplicate that arrives in a later search", async () => {
+    const { org, aoiId } = await setupOrg();
+    await ingestBatch(org.id, aoiId, [asset("S2B_Y_0", t)]);
+    const later = await ingestBatch(org.id, aoiId, [asset("S2B_Y_1", plus(7))]);
+    expect(later).toMatchObject({ queued: 0, skipped: 1 });
+  });
+});
