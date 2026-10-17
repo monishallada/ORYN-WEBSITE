@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { INDUSTRY_OPTIONS, INTENT_OPTIONS, type ContactResponse } from "@/lib/contact-schema";
+import { clientIp } from "@/server/http";
 import { integrationEnabled } from "@/server/integrations";
 
 export const runtime = "nodejs";
@@ -37,7 +38,7 @@ function json(body: ContactResponse, status = 200) {
 }
 
 export async function POST(req: Request) {
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "unknown";
+  const ip = clientIp(req.headers) ?? "unknown";
   if (rateLimited(ip)) return json({ ok: false, error: "rate_limited" }, 429);
 
   let raw: unknown;
