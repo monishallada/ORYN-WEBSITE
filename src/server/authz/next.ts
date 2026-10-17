@@ -8,6 +8,7 @@ import { getSessionUser, loadSessionUser, passwordChangePath, requestMeta, requi
 import { AccessError, resolveApiKeyAccess, resolveUserOrgAccess, type OrgAccess } from "@/server/authz/access";
 import { ConfigError } from "@/server/config/env";
 import { DomainError, fromPgError } from "@/server/errors";
+import { clientIp } from "@/server/http";
 import { log } from "@/server/log";
 import { rateLimit } from "@/server/rate-limit";
 
@@ -115,7 +116,7 @@ export function orgApi<P extends { org: string }>(
     try {
       const params = await routeCtx.params;
       const meta = {
-        ip: req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || null,
+        ip: clientIp(req.headers),
         userAgent: req.headers.get("user-agent")?.slice(0, 300) ?? null,
       };
       const authz = req.headers.get("authorization");

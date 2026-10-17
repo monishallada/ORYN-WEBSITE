@@ -113,7 +113,8 @@ export function DetectionInspector({
         <Notice tone="info">
           NDVI here was low relative to the rest of this area on {d.comparison ? formatDate(d.comparison.observedAt, timeZone) : "this date"}. That is a
           measurement, not a diagnosis: planting gaps, a different crop or growth stage, bare soil or tracks, waterlogging, drought, nutrient, pest or disease
-          stress, lodging, and residual cloud shadow can all look like this. Check it in the field before acting.
+          stress, lodging, and residual cloud shadow can all look like this. Check it in the field before acting. The evidence grade rates the
+          strength and quality of the satellite signal; it is not a validated agronomic accuracy — no ground-truth data stands behind it.
         </Notice>
       ) : (
         <Notice tone="info">

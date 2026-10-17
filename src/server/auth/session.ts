@@ -1,10 +1,10 @@
 import "server-only";
 import { headers } from "next/headers";
+import { clientIp } from "@/server/http";
 import { redirect } from "next/navigation";
 import { cache } from "react";
 import { getAuth } from "@/server/auth/auth";
 import { isPlaceholderEmail } from "@/lib/accounts";
-import { env } from "@/server/config/env";
 import { withUser } from "@/server/db/client";
 import { log } from "@/server/log";
 
@@ -91,7 +91,5 @@ export async function requirePlatformAdmin(nextPath: string): Promise<SessionUse
 
 export async function requestMeta(): Promise<{ ip: string | null; userAgent: string | null }> {
   const h = await headers();
-  const configured = env.authClientIpHeader();
-  const ip = (configured ? h.get(configured)?.trim() : h.get("x-forwarded-for")?.split(",")[0]?.trim() || h.get("x-real-ip")) || null;
-  return { ip, userAgent: h.get("user-agent")?.slice(0, 300) ?? null };
+  return { ip: clientIp(h), userAgent: h.get("user-agent")?.slice(0, 300) ?? null };
 }

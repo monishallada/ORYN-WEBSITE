@@ -8,6 +8,7 @@ import {
   NavigationControl,
   ScaleControl,
   setWorkerUrl,
+  type ExpressionSpecification,
   type GeoJSONSource,
   type ImageSource,
   type LngLatBoundsLike,
@@ -52,6 +53,12 @@ type Props = {
   references?: { id: string; data: GeoJSON.FeatureCollection }[];
   initialBounds?: [number, number, number, number] | null;
   interactive?: boolean;
+  /** "globe" shows a 3D globe at low zoom (MapLibre's built-in projection; it flattens as you zoom in). */
+  projection?: "mercator" | "globe";
+  /** Public event layers (USGS earthquakes, NIFC wildfire perimeters), drawn as neutral context below areas. */
+  events?: { id: string; data: GeoJSON.FeatureCollection }[];
+  selectedEventId?: string | null;
+  onEventClick?: (layer: string, id: string) => void;
   drawMode?: DrawMode | null;
   editGeometry?: PolygonGeometry | null;
   onDrawFinish?: (g: Geometry) => void;
@@ -204,6 +211,59 @@ function setReferences(map: MlMap, refs: { id: string; data: GeoJSON.FeatureColl
   }
 }
 
+// Public events are context, not ORYN findings: drawn in neutral bone and
+// told apart by mark (rings, hatching), leaving hue to ORYN's own findings.
+const EVENT_INK = "#f2f1ed";
+const HATCH = `${MINE}hatch`;
+export const EVENT_LAYERS = { quake: `${MINE}ev-usgs-earthquakes`, fire: `${MINE}ev-nifc-wildfire-perimeters` } as const;
+
+function ensureHatch(map: MlMap) {
+  if (map.hasImage(HATCH)) return;
+  const n = 8;
+  const data = new Uint8Array(n * n * 4);
+  for (let y = 0; y < n; y++)
+    for (let x = 0; x < n; x++) {
+      if ((x + y) % n !== 0 && (x + y + 1) % n !== 0) continue;
+      const i = (y * n + x) * 4;
+      data.set([0xf2, 0xf1, 0xed, 150], i);
+    }
+  map.addImage(HATCH, { width: n, height: n, data });
+}
+
+function setEvents(map: MlMap, events: { id: string; data: GeoJSON.FeatureCollection }[], selectedId: string | null) {
+  const wanted = new Set(events.map((e) => `${MINE}ev-${e.id}`));
+  for (const layer of map.getStyle().layers ?? []) {
+    const src = (layer as { source?: string }).source;
+    if (src?.startsWith(`${MINE}ev-`) && !wanted.has(src)) map.removeLayer(layer.id);
+  }
+  for (const id of Object.keys(map.getStyle().sources ?? {})) {
+    if (id.startsWith(`${MINE}ev-`) && !wanted.has(id)) map.removeSource(id);
+  }
+  const before = map.getLayer(`${MINE}aoi-fill`) ? `${MINE}aoi-fill` : undefined;
+  const sel: ExpressionSpecification = ["==", ["get", "id"], selectedId ?? ""];
+  for (const e of events) {
+    const id = `${MINE}ev-${e.id}`;
+    const src = map.getSource(id) as GeoJSONSource | undefined;
+    if (src) src.setData(e.data as never);
+    else {
+      map.addSource(id, { type: "geojson", data: e.data as never });
+      if (id === EVENT_LAYERS.fire) {
+        ensureHatch(map);
+        map.addLayer({ id, type: "fill", source: id, paint: { "fill-pattern": HATCH, "fill-opacity": 0.75 } }, before);
+        map.addLayer({ id: `${id}-line`, type: "line", source: id, paint: { "line-color": EVENT_INK, "line-width": 1.25, "line-opacity": 0.9 } }, before);
+        map.addLayer({ id: `${id}-sel`, type: "line", source: id, filter: sel, paint: { "line-color": "#ff6a2b", "line-width": 2.5 } }, before);
+      } else {
+        // Magnitude sets the ring; at globe scale the rings shrink so a busy region stays readable.
+        const mag: ExpressionSpecification = ["interpolate", ["linear"], ["get", "magnitude"], 2.5, 4, 5, 9, 7, 16, 9, 24];
+        const radius: ExpressionSpecification = ["interpolate", ["linear"], ["zoom"], 1, ["*", 0.45, mag], 6, mag];
+        map.addLayer({ id, type: "circle", source: id, paint: { "circle-radius": radius, "circle-color": EVENT_INK, "circle-opacity": 0.08, "circle-stroke-color": EVENT_INK, "circle-stroke-width": 1.5, "circle-stroke-opacity": 0.9 } }, before);
+        map.addLayer({ id: `${id}-sel`, type: "circle", source: id, filter: sel, paint: { "circle-radius": radius, "circle-opacity": 0, "circle-stroke-color": "#ff6a2b", "circle-stroke-width": 2.5 } }, before);
+      }
+    }
+    if (map.getLayer(`${id}-sel`)) map.setFilter(`${id}-sel`, sel);
+  }
+}
+
 function setOverlays(map: MlMap, overlays: MapOverlay[]) {
   const wanted = new Set(overlays.map((o) => `${MINE}ov-${o.id}`));
   for (const layer of map.getStyle().layers ?? []) {
@@ -289,6 +349,7 @@ export const MapView = forwardRef<MapHandle, Props>(function MapView(props, ref)
       if (q.aois) (map.getSource(`${MINE}aois`) as GeoJSONSource).setData(q.aois as never);
       if (q.detections) (map.getSource(`${MINE}detections`) as GeoJSONSource).setData(q.detections as never);
       setReferences(map, q.references ?? []);
+      setEvents(map, q.events ?? [], q.selectedEventId ?? null);
       emitView();
       q.onReady?.(map);
       flush();
@@ -306,14 +367,26 @@ export const MapView = forwardRef<MapHandle, Props>(function MapView(props, ref)
     // Detections sit above AOIs; stop AOI selection when a detection was hit.
     map.on("click", (e) => {
       if (drawRef.current?.enabled && drawRef.current.getMode() !== "static") return;
-      const hits = map.queryRenderedFeatures(e.point, { layers: [`${MINE}det-fill`, `${MINE}aoi-fill`].filter((l) => map.getLayer(l)) });
-      const det = hits.find((h) => h.layer.id === `${MINE}det-fill`);
-      const aoi = hits.find((h) => h.layer.id === `${MINE}aoi-fill`);
-      if (det && latest.current.showDetections) latest.current.onDetectionClick?.(String(det.properties.id));
-      else if (aoi && latest.current.showAois) latest.current.onAoiClick?.(String(aoi.properties.id));
+      const hits = map.queryRenderedFeatures(e.point, { layers: [`${MINE}det-fill`, `${MINE}aoi-fill`, EVENT_LAYERS.quake, EVENT_LAYERS.fire].filter((l) => map.getLayer(l)) });
+      const hit = (layer: string) => hits.find((h) => h.layer.id === layer);
+      const det = hit(`${MINE}det-fill`);
+      const aoi = hit(`${MINE}aoi-fill`);
+      const quake = hit(EVENT_LAYERS.quake);
+      const fire = hit(EVENT_LAYERS.fire);
+      const q = latest.current;
+      if (det && q.showDetections) q.onDetectionClick?.(String(det.properties.id));
+      else if (quake) q.onEventClick?.("usgs-earthquakes", String(quake.properties.id));
+      else if (aoi && q.showAois) q.onAoiClick?.(String(aoi.properties.id));
+      else if (fire) q.onEventClick?.("nifc-wildfire-perimeters", String(fire.properties.id));
     });
     clickLayer(`${MINE}det-fill`, () => {});
     clickLayer(`${MINE}aoi-fill`, () => {});
+    clickLayer(EVENT_LAYERS.quake, () => {});
+    clickLayer(EVENT_LAYERS.fire, () => {});
+    // Style switches can drop runtime images; re-add the hatch on demand.
+    map.on("styleimagemissing", (e) => {
+      if (e.id === HATCH) ensureHatch(map);
+    });
 
     return () => {
       drawRef.current?.stop();
@@ -337,10 +410,20 @@ export const MapView = forwardRef<MapHandle, Props>(function MapView(props, ref)
         if (!prev) return next;
         const mineSources = Object.fromEntries(Object.entries(prev.sources).filter(([k]) => k.startsWith(MINE)));
         const mineLayers = prev.layers.filter((l) => l.id.startsWith(MINE));
-        return { ...next, glyphs: next.glyphs ?? prev.glyphs, sources: { ...next.sources, ...mineSources }, layers: [...next.layers, ...mineLayers] };
+        return {
+          ...next,
+          glyphs: next.glyphs ?? prev.glyphs,
+          projection: { type: latest.current.projection ?? "mercator" },
+          sources: { ...next.sources, ...mineSources },
+          layers: [...next.layers, ...mineLayers],
+        };
       },
     });
   }, [basemapId]);
+
+  useEffect(() => {
+    whenReady((map) => map.setProjection({ type: latest.current.projection ?? "mercator" }));
+  }, [props.projection]);
 
   useEffect(() => {
     whenReady((map) => setOverlays(map, latest.current.overlays));
@@ -350,6 +433,10 @@ export const MapView = forwardRef<MapHandle, Props>(function MapView(props, ref)
   useEffect(() => {
     whenReady((map) => setReferences(map, latest.current.references ?? []));
   }, [props.references]);
+
+  useEffect(() => {
+    whenReady((map) => setEvents(map, latest.current.events ?? [], latest.current.selectedEventId ?? null));
+  }, [props.events, props.selectedEventId]);
 
   useEffect(() => {
     whenReady((map) => {

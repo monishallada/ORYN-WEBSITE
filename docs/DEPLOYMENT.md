@@ -183,6 +183,8 @@ Integrations whose live behaviour was never verified stay **off in production** 
 | `gdelt` | `node dist/verify.mjs gdelt` | One article search from this deployment's egress address succeeds |
 | `nasa-hls` | `node dist/verify.mjs nasa-hls` | Earthdata token reads an HLS GeoTIFF header |
 | `ai-summaries` | `node dist/verify.mjs ai-summaries` | Credentials and model access (synthetic text only — no tenant data) |
+| `usgs-earthquakes` | `node dist/verify.mjs usgs-earthquakes` | The USGS M2.5+ feed downloads and validates from this deployment. Add the id to the **web** service's `ORYN_VERIFIED_INTEGRATIONS` (the web app fetches it) |
+| `nifc-wildfire-perimeters` | `node dist/verify.mjs nifc-wildfire-perimeters` | WFIGS current perimeters download (all pages) and validate. Add the id to the **web** service's variable |
 
 Always verified at each release: `verify.mjs database` (role privileges, RLS on every tenant table, migration state), `verify.mjs storage` (write/read/delete; anonymous read refused; encryption header), `verify.mjs providers` (health probes of enabled providers).
 

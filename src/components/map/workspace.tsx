@@ -7,9 +7,11 @@ import { Circle, Layers, ListFilter, MapPin, Pentagon, Search, Spline, Square, X
 import { AoiInspector, type InspectorPerms } from "@/components/map/aoi-inspector";
 import { api, ApiError, orgApi } from "@/components/map/api";
 import { DetectionInspector } from "@/components/map/detection-inspector";
+import { EventInspector, type SelectedEvent } from "@/components/map/event-inspector";
 import { DETECTION_COLORS, DetectionLegend, RasterLegend } from "@/components/map/legend";
 import { MapView, type DrawMode, type MapHandle, type RasterOverlay } from "@/components/map/map-view";
 import { NewAoiPanel } from "@/components/map/new-aoi-panel";
+import { ScenesPanel, type SavedScene } from "@/components/map/scenes-panel";
 import { ObservationMeta } from "@/components/map/observation-meta";
 import type { Aoi, AoiFeatureProps, Detection, DetectionFeatureProps, FC, Observation } from "@/components/map/types";
 import { Badge, Button, inputClass, Notice } from "@/components/platform/ui";
@@ -18,10 +20,29 @@ import { cn } from "@/lib/cn";
 import { formatDate, relativeTime } from "@/lib/format";
 import { bboxOf, formatArea, metersPerPixel, parseCoordinates, type Geometry, type PolygonGeometry } from "@/lib/geo";
 import type { MapBasemap, MapOverlay } from "@/lib/map-layer-types";
+import { FEED_STATE_LABEL, PUBLIC_EVENT_LAYER_IDS, PUBLIC_EVENT_LAYERS, type FeedState, type PublicEventLayerId, type PublicEventsResponse } from "@/lib/public-events";
+import { SCENE_IMAGERY_KINDS, SCENE_VERIFICATION, type ScenePreset, type SceneState, type SceneStateInput } from "@/lib/scenes";
 
-type Filters = { verification: string[]; minGrade: "" | "weak" | "moderate" | "strong"; types: string[]; days: number };
+type Filters = { verification: (typeof SCENE_VERIFICATION)[number][]; minGrade: "" | "weak" | "moderate" | "strong"; types: string[]; days: number };
 // Weak candidates are numerous and mostly noise (season, haze, mask edges); they are one click away.
 const DEFAULT_FILTERS: Filters = { verification: ["unverified", "needs_field_check", "confirmed"], minGrade: "moderate", types: [], days: 365 };
+type SceneImagery = NonNullable<SceneState["imagery"]>;
+const isSceneImageryKind = (k: string): k is SceneImagery["kind"] => (SCENE_IMAGERY_KINDS as readonly string[]).includes(k);
+const IMAGERY_PREF = ["ndvi", "ndmi", "s1_water", "ndwi", "landcover"];
+type EventDays = 1 | 7 | 30;
+const FEED_TONE: Record<FeedState, "good" | "info" | "watch" | "alert" | "muted"> = { nominal: "good", loading: "muted", partial: "info", stale: "watch", unavailable: "alert", disabled: "muted" };
+const wrapLon = (x: number) => ((((x + 180) % 360) + 360) % 360) - 180;
+/** The request box for public events: the view padded by a quarter, wrapped to ±180, rounded so small pans reuse it. */
+function eventBoxFor(b: [number, number, number, number] | null): string | null {
+  if (!b) return null;
+  const dx = (b[2] - b[0]) / 4;
+  const dy = (b[3] - b[1]) / 4;
+  const s = Math.max(-90, b[1] - dy);
+  const n = Math.min(90, b[3] + dy);
+  const r = (v: number) => Math.round(v * 100) / 100;
+  if (b[2] - b[0] + 2 * dx >= 359.9) return `-180,${r(s)},180,${r(n)}`;
+  return [wrapLon(b[0] - dx), s, wrapLon(b[2] + dx), n].map(r).join(",");
+}
 
 export type WorkspaceProps = {
   slug: string;
@@ -62,9 +83,19 @@ export function MapWorkspace(props: WorkspaceProps) {
   const [overlayIds, setOverlayIds] = useState<string[]>([]);
   const [showAois, setShowAois] = useState(true);
   const [showDetections, setShowDetections] = useState(true);
-  const [view, setView] = useState<{ zoom: number; center: [number, number] } | null>(null);
+  const [view, setView] = useState<{ zoom: number; center: [number, number]; bounds: [number, number, number, number] } | null>(null);
+  const [eventIds, setEventIds] = useState<PublicEventLayerId[]>([]);
+  const [eventDays, setEventDays] = useState<EventDays>(7);
+  const [eventData, setEventData] = useState<Partial<Record<PublicEventLayerId, { key: string; res: PublicEventsResponse | null; error: string | null }>>>({});
+  const [selEvent, setSelEvent] = useState<SelectedEvent | null>(null);
   const [leftOpen, setLeftOpen] = useState(true);
-  const [tab, setTab] = useState<"areas" | "layers" | "changes">("areas");
+  const [tab, setTab] = useState<"areas" | "layers" | "changes" | "scenes">("areas");
+  const [projection, setProjection] = useState<"mercator" | "globe">("mercator");
+  const [chartIndex, setChartIndex] = useState<"ndvi" | "ndmi">("ndvi");
+  /** Area whose observations are in `timeline` (null while loading). */
+  const [timelineAoi, setTimelineAoi] = useState<string | null>(null);
+  /** Image a restored scene asked for, resolved once that area's observations load. */
+  const pendingImagery = useRef<(SceneImagery & { aoiId: string }) | null>(null);
   const [query, setQuery] = useState("");
   type SearchHit = { label: string; position: [number, number]; bbox?: [number, number, number, number]; aoiId?: string; source: string };
   const [results, setResults] = useState<SearchHit[] | null>(null);
@@ -81,6 +112,47 @@ export function MapWorkspace(props: WorkspaceProps) {
       cancelled = true;
     };
   }, [slug]);
+
+  const eventBox = eventBoxFor(view?.bounds ?? null);
+  const eventKey = `${eventBox}|${eventDays}`;
+  useEffect(() => {
+    if (!eventBox || eventIds.length === 0) return;
+    let cancelled = false;
+    const key = `${eventBox}|${eventDays}`;
+    for (const id of eventIds) {
+      const qs = new URLSearchParams({ bbox: eventBox });
+      if (PUBLIC_EVENT_LAYERS[id].windows) qs.set("days", String(eventDays));
+      api<PublicEventsResponse>(`${orgApi(slug)}/public-events/${id}?${qs}`)
+        .then((res) => !cancelled && setEventData((d) => ({ ...d, [id]: { key, res, error: null } })))
+        .catch((e: unknown) => {
+          if (!cancelled) setEventData((d) => ({ ...d, [id]: { key, res: d[id]?.res ?? null, error: e instanceof ApiError ? e.message : "Could not load this layer." } }));
+        });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [slug, eventIds, eventBox, eventDays]);
+
+  const mapEvents = useMemo(
+    () => eventIds.flatMap((id) => (eventData[id]?.res ? [{ id: id as string, data: eventData[id]!.res!.features as GeoJSON.FeatureCollection }] : [])),
+    [eventIds, eventData],
+  );
+
+  /** One honest state per enabled feed (the server's, unless this browser's request failed or is in flight). */
+  const eventState = (id: PublicEventLayerId): FeedState => {
+    const d = eventData[id];
+    if (!d || (d.key !== eventKey && !d.res)) return "loading";
+    if (d.error) return d.res ? "stale" : "unavailable";
+    return d.res?.feed.state ?? "loading";
+  };
+
+  function selectEvent(layer: string, id: string) {
+    const res = eventData[layer as PublicEventLayerId]?.res;
+    const f = res?.features.features.find((x) => x.properties.id === id);
+    if (!f || !res) return;
+    setSelDet(null);
+    setSelEvent({ props: f.properties, geometry: f.geometry, feed: res.feed });
+  }
 
   async function toggleReference(id: string, on: boolean) {
     if (!on) return setRefData((d) => d.filter((x) => x.id !== id));
@@ -150,15 +222,18 @@ export function MapWorkspace(props: WorkspaceProps) {
   const selectAoi = (id: string, zoom = true) => {
     setSelAoi(id);
     setSelDet(null);
+    setSelEvent(null);
     if (id !== selAoi) {
       setActive(null);
       setCompare(null);
       setTimeline([]);
+      setTimelineAoi(null);
     }
     if (zoom) zoomToAoi(id);
   };
 
   const selectDetection = (id: string) => {
+    setSelEvent(null);
     setSelDet(id);
   };
 
@@ -187,6 +262,98 @@ export function MapWorkspace(props: WorkspaceProps) {
     setCompare(null);
     setActive(o);
   };
+
+  /** Show the saved image from this area's own (permission-checked) observation list, or say it is gone. */
+  const resolveImagery = (want: SceneImagery, obs: Observation[]) => {
+    const t = Date.parse(want.observedAt);
+    const o = obs.find((x) => x.kind === want.kind && Date.parse(x.observedAt) === t && x.status === "valid" && x.hasRaster);
+    if (o) {
+      setLayer(want.layer);
+      showObservation(o);
+    } else {
+      showObservation(null);
+      setNotice(`The scene's ${want.kind.toUpperCase()} image of ${formatDate(want.observedAt, timeZone)} is no longer available for this area; the rest of the view was restored.`);
+    }
+  };
+
+  const captureScene = (): SceneStateInput | null => {
+    const m = mapRef.current?.map();
+    if (!m) return null;
+    const c = m.getCenter().wrap();
+    const round = (v: number, d = 6) => Math.round(v * 10 ** d) / 10 ** d;
+    return {
+      view: { center: [round(c.lng), round(Math.max(-85.05, Math.min(85.05, c.lat)))], zoom: round(m.getZoom(), 2), bearing: round(m.getBearing(), 1), pitch: round(m.getPitch(), 1) },
+      projection,
+      basemap: basemap.id,
+      overlays: overlayIds,
+      showAois,
+      showDetections,
+      publicEvents: eventIds,
+      eventDays,
+      aoiId: selAoi,
+      imagery: active && !changeMap && isSceneImageryKind(active.kind) ? { kind: active.kind, observedAt: active.observedAt, layer } : null,
+      chartIndex,
+      changes: filters,
+    };
+  };
+
+  function applyScene(scene: SavedScene) {
+    const st = scene.state;
+    setDrawMode(null);
+    setDraft(null);
+    setEdit(null);
+    setSelDet(null);
+    if (st.basemap && props.basemaps.some((b) => b.id === st.basemap)) setBasemapId(st.basemap);
+    setOverlayIds(st.overlays.filter((id) => props.overlays.some((o) => o.id === id)));
+    setShowAois(st.showAois);
+    setShowDetections(st.showDetections);
+    setEventIds(st.publicEvents);
+    setEventDays(st.eventDays);
+    setSelEvent(null);
+    setProjection(st.projection);
+    setChartIndex(st.chartIndex);
+    if (st.changes) setFilters(st.changes);
+    mapRef.current?.map()?.jumpTo({ center: st.view.center, zoom: st.view.zoom, bearing: st.view.bearing, pitch: st.view.pitch });
+    pendingImagery.current = null;
+    if (st.aoiId && aois.features.some((f) => f.properties.id === st.aoiId)) {
+      const sameArea = st.aoiId === selAoi && timelineAoi === selAoi;
+      selectAoi(st.aoiId, false);
+      if (!st.imagery) showObservation(null);
+      else if (sameArea) resolveImagery(st.imagery, timeline);
+      else pendingImagery.current = { ...st.imagery, aoiId: st.aoiId };
+    } else {
+      setSelAoi(null);
+      setTimeline([]);
+      setTimelineAoi(null);
+      showObservation(null);
+      if (scene.aoiUnavailable || st.aoiId) setNotice("The scene's area is not available to you; the rest of the view was restored.");
+    }
+  }
+
+  function applyPreset(p: ScenePreset) {
+    const a = p.apply;
+    if (a.basemap && props.basemaps.some((b) => b.id === a.basemap)) setBasemapId(a.basemap);
+    if (a.overlays) setOverlayIds(a.overlays.filter((id) => props.overlays.some((o) => o.id === id)));
+    if (a.showAois !== undefined) setShowAois(a.showAois);
+    if (a.showDetections !== undefined) setShowDetections(a.showDetections);
+    if (a.changes) setFilters(a.changes);
+    if (a.chartIndex) {
+      setChartIndex(a.chartIndex);
+      if (a.chartIndex === "ndmi" && timelineAoi && !timeline.some((o) => o.kind === "ndmi" && o.status === "valid")) {
+        setNotice("This area has no usable NDMI image yet, so the chart stays on NDVI. NDMI needs Sentinel-2's 20 m short-wave infrared band.");
+      }
+    }
+    if (a.latestImagery) {
+      const usable = timeline.filter((o) => o.status === "valid" && o.hasRaster);
+      const kind = IMAGERY_PREF.find((k) => usable.some((o) => o.kind === k));
+      const latest = usable.filter((o) => o.kind === kind).sort((x, y) => Date.parse(y.observedAt) - Date.parse(x.observedAt))[0];
+      if (latest) showObservation(latest);
+      else setNotice(timelineAoi ? "This area has no usable satellite image yet." : "The area's images are still loading; try again in a moment.");
+    }
+  }
+
+  /** Drawing and boundary editing always use the flat map. */
+  const mapProjection = projection === "globe" && !drawMode && !edit && !draft ? "globe" : "mercator";
 
   const gsd = active?.asset.gsdM ?? active?.quality.gsd_m ?? null;
   const mpp = view ? metersPerPixel(view.zoom, view.center[1]) : null;
@@ -263,7 +430,7 @@ export function MapWorkspace(props: WorkspaceProps) {
           </div>
         ) : null}
         <div role="tablist" aria-label="Workspace panels" className="flex border-b border-bone-50/[0.08] text-[0.75rem]">
-          {(["areas", "layers", "changes"] as const).map((t) => (
+          {(["areas", "layers", "changes", "scenes"] as const).map((t) => (
             <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)} className={cn("flex-1 py-2 capitalize", tab === t ? "border-b border-signal text-bone-50" : "text-bone-50/55 hover:text-bone-50")}>
               {t === "changes" ? `Changes (${detList.length})` : t}
             </button>
@@ -305,8 +472,22 @@ export function MapWorkspace(props: WorkspaceProps) {
                 ))}
               </ul>
             </div>
+          ) : tab === "scenes" ? (
+            <ScenesPanel slug={slug} timeZone={timeZone} canShare={perms.notes} hasArea={Boolean(selAoi)} capture={captureScene} onApply={applyScene} onPreset={applyPreset} />
           ) : tab === "layers" ? (
             <div className="flex flex-col gap-5 p-3 text-[0.8125rem]">
+              <fieldset>
+                <legend className="t-eyebrow mb-2 text-bone-50/45">View</legend>
+                {([
+                  ["mercator", "Flat map (2D)", "For field boundaries, imagery, and measurement."],
+                  ["globe", "Globe (3D overview)", "Global context at low zoom; it flattens as you zoom in. Drawing and editing switch to the flat map."],
+                ] as const).map(([v, label, note]) => (
+                  <label key={v} className="flex items-start gap-2 py-1">
+                    <input type="radio" name="projection" className="mt-1" checked={projection === v} onChange={() => setProjection(v)} />
+                    <span><span className="block">{label}</span><span className="block text-[0.6875rem] text-bone-50/45">{note}</span></span>
+                  </label>
+                ))}
+              </fieldset>
               <fieldset>
                 <legend className="t-eyebrow mb-2 text-bone-50/45">Basemap</legend>
                 {props.basemaps.map((b) => (
@@ -330,6 +511,72 @@ export function MapWorkspace(props: WorkspaceProps) {
                 ))}
                 <label className="flex items-center gap-2 py-1"><input type="checkbox" checked={showAois} onChange={(e) => setShowAois(e.target.checked)} /> Areas of interest</label>
                 <label className="flex items-center gap-2 py-1"><input type="checkbox" checked={showDetections} onChange={(e) => setShowDetections(e.target.checked)} /> Candidate changes</label>
+              </fieldset>
+              {/* min-w-0: a fieldset otherwise grows to its longest (truncated) row and the panel scrolls sideways. */}
+              <fieldset className="min-w-0">
+                <legend className="t-eyebrow mb-2 text-bone-50/45">Public events</legend>
+                <p className="mb-1 text-[0.6875rem] text-bone-50/45">Public records shown for context — not ORYN findings, and never added to alerts automatically.</p>
+                {PUBLIC_EVENT_LAYER_IDS.map((id) => {
+                  const l = PUBLIC_EVENT_LAYERS[id];
+                  const on = eventIds.includes(id);
+                  const d = eventData[id];
+                  const st = on ? eventState(id) : null;
+                  return (
+                    <div key={id} className="py-1">
+                      <label className="flex items-start gap-2">
+                        <input type="checkbox" className="mt-1" checked={on} onChange={(e) => setEventIds((ids) => (e.target.checked ? [...ids, id] : ids.filter((x) => x !== id)))} />
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-center justify-between gap-2">
+                            <span className="flex items-center gap-1.5">
+                              {l.geometry === "point" ? (
+                                <svg aria-hidden="true" width="12" height="12" viewBox="0 0 12 12"><circle cx="6" cy="6" r="4.5" fill="none" stroke="#f2f1ed" strokeWidth="1.5" /></svg>
+                              ) : (
+                                <svg aria-hidden="true" width="12" height="12" viewBox="0 0 12 12"><rect x="0.75" y="0.75" width="10.5" height="10.5" fill="none" stroke="#f2f1ed" strokeWidth="1.25" /><path d="M0 6 6 0M0 12 12 0M6 12 12 6" stroke="#f2f1ed" strokeOpacity="0.6" /></svg>
+                              )}
+                              {l.name}
+                            </span>
+                            {st ? <Badge tone={FEED_TONE[st]}>{FEED_STATE_LABEL[st]}</Badge> : null}
+                          </span>
+                          <span className="block text-[0.6875rem] text-bone-50/45">
+                            {l.geometry === "point" ? "Ring size = magnitude · " : "Hatched = reported perimeter · "}
+                            {l.attribution}
+                          </span>
+                          {on && d?.res && d.res.feed.state !== "disabled" && d.res.feed.state !== "unavailable" ? (
+                            <span className="block text-[0.6875rem] text-bone-50/45">
+                              {d.res.total} in view{d.res.feed.retrievedAt ? ` · retrieved ${relativeTime(d.res.feed.retrievedAt)}` : ""}
+                            </span>
+                          ) : null}
+                          {on && (d?.error || d?.res?.feed.message) ? <span className="block text-[0.6875rem] text-data-amber">{d?.error ?? d?.res?.feed.message}</span> : null}
+                        </span>
+                      </label>
+                      {on && d?.res && d.res.features.features.length ? (
+                        <ul className="ml-6 mt-1" aria-label={`${l.name} in view`}>
+                          {d.res.features.features.slice(0, 5).map((f) => (
+                            <li key={f.properties.id}>
+                              <button
+                                className={cn("block w-full truncate rounded-[2px] px-1 py-0.5 text-left text-[0.75rem] text-bone-50/75 hover:bg-bone-50/[0.05]", selEvent?.props.id === f.properties.id && "text-signal")}
+                                onClick={() => selectEvent(id, f.properties.id)}
+                              >
+                                {f.properties.layer === "usgs-earthquakes"
+                                  ? `M${f.properties.magnitude.toFixed(1)} · ${f.properties.place ?? "Unknown place"}`
+                                  : `${f.properties.title}${f.properties.acres !== null ? ` · ${Math.round(f.properties.acres).toLocaleString("en-US")} ac` : ""}`}
+                                {f.properties.observedAt ? <span className="text-bone-50/40"> · {relativeTime(f.properties.observedAt)}</span> : null}
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                      {on && l.windows ? (
+                        <label className="ml-6 mt-1 flex items-center gap-2 text-[0.75rem] text-bone-50/60">
+                          Past
+                          <select className={cn(inputClass, "w-auto py-0.5 text-[0.75rem]")} value={eventDays} onChange={(e) => setEventDays(Number(e.target.value) as EventDays)}>
+                            {l.windows.map((w) => <option key={w} value={w}>{w === 1 ? "24 hours" : `${w} days`}</option>)}
+                          </select>
+                        </label>
+                      ) : null}
+                    </div>
+                  );
+                })}
               </fieldset>
               <fieldset>
                 <legend className="t-eyebrow mb-2 text-bone-50/45">Reference layers</legend>
@@ -411,6 +658,10 @@ export function MapWorkspace(props: WorkspaceProps) {
           ariaLabel="Geospatial workspace map"
           basemap={basemap}
           overlays={overlays}
+          projection={mapProjection}
+          events={mapEvents}
+          selectedEventId={selEvent?.props.id ?? null}
+          onEventClick={selectEvent}
           aois={aois}
           detections={detections}
           showAois={showAois}
@@ -426,7 +677,7 @@ export function MapWorkspace(props: WorkspaceProps) {
           onEditChange={(g) => setEdit((e) => (e ? { ...e, geom: g } : e))}
           onAoiClick={(id) => selectAoi(id, false)}
           onDetectionClick={selectDetection}
-          onView={(v) => setView({ zoom: v.zoom, center: v.center })}
+          onView={(v) => setView(v)}
           onReady={(m) => {
             primary.current = m;
           }}
@@ -437,6 +688,7 @@ export function MapWorkspace(props: WorkspaceProps) {
               <MapView
                 className="absolute inset-0"
                 interactive={false}
+                projection={mapProjection}
                 basemap={basemap}
                 overlays={[]}
                 aois={aois}
@@ -600,7 +852,7 @@ export function MapWorkspace(props: WorkspaceProps) {
         ) : null}
 
         {/* Right inspector */}
-        {draft || selDet || selAoi || active ? (
+        {draft || selDet || selEvent || selAoi || active ? (
           <aside className="absolute inset-y-0 right-0 z-20 w-[380px] max-w-full overflow-y-auto border-l border-bone-50/[0.08] bg-ink-950/96 backdrop-blur" aria-label="Details">
             {draft ? (
               <NewAoiPanel
@@ -650,6 +902,18 @@ export function MapWorkspace(props: WorkspaceProps) {
                   });
                 }}
               />
+            ) : selEvent ? (
+              <EventInspector
+                key={selEvent.props.id}
+                slug={slug}
+                timeZone={timeZone}
+                event={selEvent}
+                aois={aois}
+                canNote={perms.notes}
+                onClose={() => setSelEvent(null)}
+                onZoom={(b) => mapRef.current?.fitBounds(b, { maxZoom: 11, padding: 80 })}
+                onSelectAoi={(id) => selectAoi(id)}
+              />
             ) : selAoi ? (
               <AoiInspector
                 key={selAoi}
@@ -659,7 +923,17 @@ export function MapWorkspace(props: WorkspaceProps) {
                 timeZone={timeZone}
                 detections={detections}
                 activeObservationId={active?.id ?? null}
-                onLoaded={(_a, obs) => setTimeline(obs)}
+                onLoaded={(a, obs) => {
+                  setTimeline(obs);
+                  setTimelineAoi(a.id);
+                  const want = pendingImagery.current;
+                  if (want && want.aoiId === a.id) {
+                    pendingImagery.current = null;
+                    resolveImagery(want, obs);
+                  }
+                }}
+                chartKind={chartIndex}
+                onChartKindChange={setChartIndex}
                 onShowObservation={showObservation}
                 onSelectDetection={selectDetection}
                 onEditBoundary={(aoi) => {

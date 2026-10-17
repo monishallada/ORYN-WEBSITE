@@ -154,6 +154,15 @@ Production gates: email, GDELT, NASA HLS reads, and AI summaries stay off in pro
 - **Licence:** Free public vector-tile service without SLA (OpenFreeMap terms of service). Map data © OpenStreetMap contributors under the ODbL 1.0; tiles follow the OpenMapTiles schema. Attribution is required. (https://openfreemap.org/tos/)
 - **Redistribution:** Display with attribution; bulk downloads are limited by the OpenFreeMap terms. **Commercial use:** allowed.
 
+### Public event layers — USGS earthquakes (`usgs-earthquakes`) and NIFC WFIGS (`nifc-wildfire-perimeters`)
+
+Map context only (`src/server/public-events/`); fetched by the **web** service on demand and cached per process, not polled per area and not stored.
+
+- **USGS ANSS ComCat summary feed** — https://earthquake.usgs.gov/earthquakes/feed/v1.0/geojson.php — `summary/2.5_month.geojson` (M2.5+, past 30 days, worldwide; ~1.4 MB; regenerated every minute). Cached 5 minutes. **Licence:** U.S. public domain; credit "U.S. Geological Survey". Records keep origin time, last update, and review status (automatic / reviewed).
+- **NIFC WFIGS Interagency Perimeters — current** — ArcGIS feature service `WFIGS_Interagency_Perimeters_Current` (keyless; paged with `exceededTransferLimit`; simplified to ~100 m). Cached 15 minutes. **Licence:** U.S. Government interagency data (NIFC Open Data, public domain); credit "National Interagency Fire Center (WFIGS)". Records keep the perimeter date (`poly_DateCurrent`) and discovery time.
+- **Credentials:** none. **Commercial use:** allowed. **Gated:** off in production until `node dist/verify.mjs <id>` passes and the id is added to the web service's `ORYN_VERIFIED_INTEGRATIONS`.
+- Not used (licence or key): NASA FIRMS (needs a MAP_KEY), Esri World Imagery (Esri terms), Cesium ion / Google 3D tiles (keys, non-commercial or metered).
+
 ## Adding a provider
 
 1. Implement the relevant interface (`ImageryProvider` for catalogs; plain functions returning `WeatherRecord` / `WeatherWarning` / `NewsArticle` / `ReferenceFeature` otherwise) in `src/server/providers/<kind>/`.
