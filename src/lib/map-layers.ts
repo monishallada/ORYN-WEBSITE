@@ -42,6 +42,8 @@ export type MapLayer = {
   /** Area covered, when not global. */
   coverage?: string;
   notes?: string;
+  /** Imagery of past dates (e.g. an orthoimagery mosaic): the map labels it as not current conditions. */
+  historical?: boolean;
 };
 
 const NATIONAL_MAP = "https://basemap.nationalmap.gov/arcgis/rest/services";
@@ -64,6 +66,7 @@ export const MAP_LAYERS: readonly MapLayer[] = [
     sourceUrl: `${NATIONAL_MAP}/USGSImageryOnly/MapServer`,
     coverage: "United States",
     notes: "Orthoimagery mosaic of varying dates (the service states its last refresh); not current conditions.",
+    historical: true,
   },
   {
     id: "usgs-topo",

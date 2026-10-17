@@ -4,7 +4,7 @@ import type { MapBasemap, MapOverlay } from "@/lib/map-layer-types";
 
 function toBasemap(l: MapLayer): MapBasemap | null {
   if (l.kind === "vector-style" && l.styleUrl) return { id: l.id, label: l.label, kind: "vector-style", styleUrl: l.styleUrl, attribution: l.attribution, license: l.license, notes: l.notes };
-  if (l.kind === "raster" && l.tileUrl) return { id: l.id, label: l.label, kind: "raster", tiles: l.tileUrl, tileSize: l.tileSize ?? 256, maxNativeZoom: l.maxNativeZoom, attribution: l.attribution, license: l.license, notes: l.notes };
+  if (l.kind === "raster" && l.tileUrl) return { id: l.id, label: l.label, kind: "raster", tiles: l.tileUrl, tileSize: l.tileSize ?? 256, maxNativeZoom: l.maxNativeZoom, attribution: l.attribution, license: l.license, notes: l.notes, historical: l.historical };
   return null;
 }
 

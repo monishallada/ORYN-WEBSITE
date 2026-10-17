@@ -4,6 +4,7 @@
  *
  *   npx tsx scripts/oryn/validate-field.ts [--days 180]
  *   npx tsx scripts/oryn/validate-field.ts --zones-only   # recompute zones on the stored NDVI (local data only)
+ *   npx tsx scripts/oryn/validate-field.ts --aoi-name "US-Ne1 run 2"   # a fresh area with the same boundary
  *
  * Creates (once) a local organization "validation-mead" (agriculture, not
  * synthetic) with an area of interest over the University of Nebraska–
@@ -27,6 +28,8 @@ async function main() {
   loadEnvConfig(process.cwd(), true);
   if (process.env.NODE_ENV === "production") throw new Error("Refusing to run against a production configuration.");
   const days = Number(process.argv[process.argv.indexOf("--days") + 1]) || 180;
+  const nameIdx = process.argv.indexOf("--aoi-name");
+  const aoiName = nameIdx > 0 && process.argv[nameIdx + 1] ? process.argv[nameIdx + 1]! : "US-Ne1 centre pivot";
   const [{ default: postgres }, { executeJob }, { buildRegistry }, { enqueue }, { closeDb }, { registerAnalytics }, { withSystem }] = await Promise.all([
     import("postgres"),
     import("@/server/jobs/worker"),
@@ -41,11 +44,11 @@ async function main() {
     await withSystem("validate.register", (tx) => registerAnalytics(tx));
     await owner`insert into organizations (slug, name, kind, is_synthetic) values (${ORG_SLUG}, 'Validation — UNL Mead US-Ne1', 'agriculture', false) on conflict (slug) do nothing`;
     const [org] = await owner<{ id: string }[]>`select id from organizations where slug = ${ORG_SLUG}`;
-    let [aoi] = await owner<{ id: string }[]>`select id from aois where org_id = ${org!.id} and name = 'US-Ne1 centre pivot'`;
+    let [aoi] = await owner<{ id: string }[]>`select id from aois where org_id = ${org!.id} and name = ${aoiName}`;
     if (!aoi) {
       [aoi] = await owner<{ id: string }[]>`
         insert into aois (org_id, name, description, kind, geom, input_geom, boundary_source, data_sources, enabled_analytics, max_cloud_cover, monitoring_enabled)
-        values (${org!.id}, 'US-Ne1 centre pivot',
+        values (${org!.id}, ${aoiName},
                 'UNL Mead AmeriFlux site US-Ne1 (irrigated maize). 390 m radius around the published pivot centre.', 'field',
                 ST_Multi(ST_Buffer(ST_SetSRID(ST_Point(${CENTER[0]}, ${CENTER[1]}), 4326)::geography, ${RADIUS_M}, 32)::geometry),
                 ST_SetSRID(ST_Point(${CENTER[0]}, ${CENTER[1]}), 4326),

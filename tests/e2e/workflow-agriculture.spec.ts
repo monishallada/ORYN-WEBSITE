@@ -58,6 +58,8 @@ test("agricultural monitoring: inspect a within-field low-vigour zone", async ({
   await expect(panel.getByText("No earlier usable image within 45 days to check persistence.").first()).toBeVisible();
   await expect(panel.getByRole("button", { name: "Show NDVI" })).toBeVisible();
   await expect(panel.getByText("Evidence: strong")).toBeVisible();
+  // With no satellite image displayed, the historical basemap says what it is.
+  await expect(page.getByRole("note").filter({ hasText: "a mosaic of varying dates, not current conditions" })).toBeVisible();
   // The layer legend lists zones with their own (dashed) symbol and label.
   await page.getByRole("tab", { name: "Layers" }).click();
   await expect(page.getByText("Low-vigour zone (within-field, one date)")).toBeVisible();

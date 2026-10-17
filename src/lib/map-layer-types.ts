@@ -4,7 +4,7 @@
  * depends only on this file.
  */
 export type MapBasemap =
-  | { id: string; label: string; kind: "raster"; tiles: string; tileSize: number; maxNativeZoom?: number; attribution: string; license: string; notes?: string }
+  | { id: string; label: string; kind: "raster"; tiles: string; tileSize: number; maxNativeZoom?: number; attribution: string; license: string; notes?: string; historical?: boolean }
   | { id: string; label: string; kind: "vector-style"; styleUrl: string; attribution: string; license: string; notes?: string };
 
 export type MapOverlay = {

@@ -312,7 +312,11 @@ export function MapWorkspace(props: WorkspaceProps) {
                 {props.basemaps.map((b) => (
                   <label key={b.id} className="flex items-start gap-2 py-1">
                     <input type="radio" name="basemap" checked={basemapId === b.id} onChange={() => setBasemapId(b.id)} className="mt-1" disabled={Boolean(drawMode || edit)} />
-                    <span><span className="block">{b.label}</span><span className="block text-[0.6875rem] text-bone-50/45">{b.attribution}</span></span>
+                    <span>
+                      <span className="block">{b.label}</span>
+                      <span className="block text-[0.6875rem] text-bone-50/45">{b.attribution}</span>
+                      {b.notes ? <span className="block text-[0.6875rem] text-bone-50/45">{b.notes}</span> : null}
+                    </span>
                   </label>
                 ))}
               </fieldset>
@@ -507,6 +511,11 @@ export function MapWorkspace(props: WorkspaceProps) {
             <Notice tone="info" className="bg-ink-950/95">
               <span className="flex items-start justify-between gap-3">{notice}<button aria-label="Dismiss" onClick={() => setNotice(null)}><X className="size-3.5" /></button></span>
             </Notice>
+          </div>
+        ) : null}
+        {basemap.kind === "raster" && basemap.historical && !primaryRaster && !compare ? (
+          <div className="pointer-events-none absolute left-3 top-14 z-10 max-w-[min(420px,calc(100%-24px))] rounded-[3px] border border-bone-50/[0.1] bg-ink-950/90 px-2 py-1 text-[0.6875rem] text-bone-50/70" role="note">
+            Basemap: {basemap.label} — a mosaic of varying dates, not current conditions. Select a date to show satellite imagery with its acquisition date.
           </div>
         ) : null}
         {beyondResolution ? (
